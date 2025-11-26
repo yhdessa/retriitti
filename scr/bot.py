@@ -21,7 +21,7 @@ async def command_start_handler(message: Message) -> None:
 
 @dp.message()
 async def echo_handler(message: "help"):
-    await message.answer(f"Hi! This bot was created for sharing music!")
+    await message.answer(f"Hi! This bot was created for sharing music! Soon it will possible to get file")
 
 @dp.message()
 async def echo(message: types.Message):
