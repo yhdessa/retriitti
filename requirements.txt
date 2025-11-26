@@ -1,0 +1,5 @@
+aiogram
+pyyaml
+python-dotenv
+SQLAlchemy
+alembic
