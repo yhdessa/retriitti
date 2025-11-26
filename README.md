@@ -16,10 +16,10 @@ Features
 •    by keywords
 •    Sending audio files to users
 •    Storing track metadata:
-		•    title
-        •    author
-        •    genre / tags
-        •    path/file ID
+    •    title
+    •    author
+    •    genre / tags
+    •    path/file ID
 •    Bot action logs
 •    Ability to extend functionality
 
@@ -28,7 +28,7 @@ Features
 Technologies
 •    Python 3.10+
 •    Aiogram / PyTelegramBotAPI — Telegram Bot API
-	•    PostgreSQL / SQLite — database
+•    PostgreSQL / SQLite — database
 •    SQLAlchemy / asyncpg — ORM/driver
 
 ---
@@ -39,19 +39,25 @@ How to run locally
 
 2. Create a virtual environment
 
+```
 python3 -m venv venv
 source venv/bin/activate
+```
 
 3. Install dependencies
 
+```
 pip install -r requirements.txt
+```
 
 4. Configure the environment
 
 Create a .env file:
 
+```
 BOT_TOKEN=your_token
 DATABASE_URL=postgresql://user:password@localhost:5432/musicdb
+``
 
 5. Run the bot
 
