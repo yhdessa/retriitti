@@ -8,7 +8,7 @@ The bot uses a database to store track information and provides convenient searc
 
 ---
 
-Features
+Features:
 •    Uploading music files to the database (by the administrator)
 •    Searching for tracks:
 •    by title
@@ -25,7 +25,7 @@ Features
 
 ---
 
-Technologies
+Technologies:
 •    Python 3.10+
 •    Aiogram / PyTelegramBotAPI — Telegram Bot API
 •    PostgreSQL / SQLite — database
@@ -57,8 +57,10 @@ Create a .env file:
 ```
 BOT_TOKEN=your_token
 DATABASE_URL=postgresql://user:password@localhost:5432/musicdb
-``
+```
 
 5. Run the bot
 
+```
 python bot/main.py
+```
