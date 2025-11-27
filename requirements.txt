@@ -1,5 +1,6 @@
 aiogram
-pyyaml
 python-dotenv
-SQLAlchemy
+pyyaml
+sqlalchemy[asyncio]
+asyncpg
 alembic
