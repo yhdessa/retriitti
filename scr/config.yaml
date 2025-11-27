@@ -1,0 +1,50 @@
+bot:
+  name: "Music Finder Bot"
+  description: "Telegram bot for searching and sending music files."
+  language: "en"
+  admins:
+    - 123456789  # your telegram id (optional)
+
+messages:
+  start: |
+    Hello, <b>{user}</b>! 👋
+    Welcome to Music Finder Bot 🎵
+    Send me the name of any song — and I will find it in the database.
+
+  help: |
+    <b>Available commands:</b>
+    /start — greetings
+    /help — this help message
+    Just send any song name to get the file.
+
+  unknown_command: "I don’t know this command yet 😅"
+  processing: "Searching for your track, please wait… 🔎"
+  not_found: "Sorry, I couldn't find this song 😔"
+  error: "Unexpected error occurred. Try again later."
+
+search:
+  max_results: 5          # how many tracks to return
+  fuzzy_search: true      # allows partial matches
+  case_sensitive: false   # ignore case difference in search
+
+database:
+  type: "sqlite"
+  path: "db/music.db"
+  table: "tracks"
+
+file_limits:
+  max_file_size_mb: 20
+  supported_formats:
+    - mp3
+    - wav
+    - flac
+
+features:
+  send_audio: true
+  inline_search: false
+  upload_enabled: false   # future feature
+
+logging:
+  level: "INFO"
+  log_to_file: true
+  file_path: "logs/bot.log"
