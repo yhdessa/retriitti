@@ -52,11 +52,16 @@ pip install -r requirements.txt
 
 4. Configure the environment
 
-Create a .env file:
+Create a .env file (one in src directory and one in root directory):
 
 ```
-BOT_TOKEN=your_token
-DATABASE_URL=postgresql://user:password@localhost:5432/musicdb
+BOT_TOKEN=your_token # this one for src
+```
+
+```
+DB_USER=... # this for root 
+DB_PASSWORD=...
+DB_NAME=...
 ```
 
 5. Run the bot
