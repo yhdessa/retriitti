@@ -9,27 +9,27 @@ The bot uses a database to store track information and provides convenient searc
 ---
 
 Features:
-•    Uploading music files to the database (by the administrator)
-•    Searching for tracks:
-•    by title
-•    by artist
-•    by keywords
-•    Sending audio files to users
-•    Storing track metadata:
-    •    title
-    •    author
-    •    genre / tags
-    •    path/file ID
-•    Bot action logs
-•    Ability to extend functionality
+-    Uploading music files to the database (by the administrator)
+-    Searching for tracks:
+-    by title
+-    by artist
+-    by keywords
+-    Sending audio files to users
+-    Storing track metadata:
+    -    title
+    -    author
+    -    genre / tags
+    -    path/file ID
+-    Bot action logs
+-    Ability to extend functionality
 
 ---
 
 Technologies:
-•    Python 3.10+
-•    Aiogram / PyTelegramBotAPI — Telegram Bot API
-•    PostgreSQL / SQLite — database
-•    SQLAlchemy / asyncpg — ORM/driver
+-    Python 3.10+
+-    Aiogram / PyTelegramBotAPI — Telegram Bot API
+-    PostgreSQL / SQLite — database
+-    SQLAlchemy / asyncpg — ORM/driver
 
 ---
 
