@@ -45,6 +45,14 @@ services:
     networks:
       - bot_network
 
+  adminer:
+    image: adminer:latest
+    container_name: adminer
+    ports:
+        - "9000:8080"
+    networks:
+        - bot_network
+
 volumes:
   db_data:
 
