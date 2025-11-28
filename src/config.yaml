@@ -25,6 +25,9 @@ search:
   fuzzy_search: true
   case_sensitive: false
 
+database:
+  url: "postgresql+asyncpg://musicbot:musicpass@db:5432/musicdb"
+
 file_limits:
   max_file_size_mb: 20
   supported_formats:
@@ -39,5 +42,9 @@ features:
 
 logging:
   level: "INFO"
+  log_to_cosole: true
   log_to_file: true
   file_path: "logs/bot.log"
+  max_file_size_mb: 10
+  backup_count: 5
+  format: "detailed"
