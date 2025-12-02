@@ -1,8 +1,6 @@
-# src/bot.py
 import asyncio
 import os
 from pathlib import Path
-import yaml
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types, Router, html
 from aiogram.client.default import DefaultBotProperties
@@ -10,6 +8,7 @@ from aiogram.filters import CommandStart, Command
 
 from utils.logger import setup_logger, get_logger
 from utils.genius_api import get_genius_client
+from utils.config import setup_config, get_config
 
 # ========== ЗАГРУЗКА КОНФИГУРАЦИИ ==========
 
@@ -22,34 +21,25 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN is not set in .env file")
 
+# Инициализируем конфиг
 config_path = BASE_DIR / "config.yaml"
-
-try:
-    with open(config_path, "r", encoding="utf-8") as f:
-        config = yaml.safe_load(f)
-except FileNotFoundError:
-    raise FileNotFoundError(f"Config file not found: {config_path}")
-except yaml.YAMLError as e:
-    raise ValueError(f"Error parsing YAML config: {e}")
-
-MESSAGES = config["messages"]
+config = setup_config(config_path)
 
 # ========== НАСТРОЙКА ЛОГИРОВАНИЯ ==========
 
-log_config = config.get("logging", {})
 logger = setup_logger(
     name="music_bot",
-    level=log_config.get("level", "INFO"),
-    log_to_console=log_config.get("log_to_console", True),
-    log_to_file=log_config.get("log_to_file", True),
-    file_path=log_config.get("file_path", "logs/bot.log"),
-    max_file_size_mb=log_config.get("max_file_size_mb", 10),
-    backup_count=log_config.get("backup_count", 5),
-    log_format=log_config.get("format", "detailed")
+    level=config.get('logging.level', 'INFO'),
+    log_to_console=config.get('logging.log_to_console', True),
+    log_to_file=config.get('logging.log_to_file', True),
+    file_path=config.get('logging.file_path', 'logs/bot.log'),
+    max_file_size_mb=config.get('logging.max_file_size_mb', 10),
+    backup_count=config.get('logging.backup_count', 5),
+    log_format=config.get('logging.format', 'detailed')
 )
 
 logger.info("=" * 60)
-logger.info("🤖 Music Finder Bot initialization started")
+logger.info(f"🤖 {config.bot_name} v{config.bot_version} initialization")
 logger.info(f"📁 Base directory: {BASE_DIR}")
 logger.info(f"📄 Config file: {config_path}")
 logger.info(f"🔐 Environment file: {env_path}")
@@ -72,7 +62,7 @@ dp.include_router(router)
 async def start_handler(message: types.Message):
     """Обработчик команды /start"""
     logger.info(f"User {message.from_user.id} ({message.from_user.full_name}) started bot")
-    text = MESSAGES["start"].format(user=html.bold(message.from_user.full_name))
+    text = config.get_message('start', user=html.bold(message.from_user.full_name))
     await message.answer(text)
 
 
@@ -80,26 +70,32 @@ async def start_handler(message: types.Message):
 async def help_handler(message: types.Message):
     """Обработчик команды /help"""
     logger.info(f"User {message.from_user.id} requested help")
-    help_text = MESSAGES["help"] + "\n\n" + \
-                "<b>Additional commands:</b>\n" + \
-                "/artist &lt;name&gt; — get artist info from Genius"
-    await message.answer(help_text)
+    text = config.get_message('help')
+    await message.answer(text)
+
+
+@router.message(Command("about"))
+async def about_handler(message: types.Message):
+    """Обработчик команды /about"""
+    logger.info(f"User {message.from_user.id} requested about")
+    text = config.get_message('about', version=config.bot_version)
+    await message.answer(text)
 
 
 @router.message(Command("artist"))
 async def artist_handler(message: types.Message):
     """Обработчик команды /artist <имя артиста>"""
+
+    # Проверяем, включена ли функция
+    if not config.genius_enabled:
+        await message.answer("⚠️ This feature is currently disabled.")
+        return
+
     command_parts = message.text.split(maxsplit=1)
 
     if len(command_parts) < 2:
-        await message.answer(
-            "ℹ️ <b>Usage:</b>\n"
-            "/artist <b>&lt;artist name&gt;</b>\n\n"
-            "<b>Examples:</b>\n"
-            "/artist The Weeknd\n"
-            "/artist My Bloody Valentine\n"
-            "/artist Radiohead"
-        )
+        text = config.get_message('artist.usage')
+        await message.answer(text)
         return
 
     artist_name = command_parts[1].strip()
@@ -108,76 +104,68 @@ async def artist_handler(message: types.Message):
     genius = get_genius_client()
 
     if not genius.is_available():
-        await message.answer(
-            "⚠️ <b>Genius API is currently unavailable</b>\n\n"
-            "Artist search feature is temporarily disabled.\n"
-            "Please contact the administrator."
-        )
+        text = config.get_message('artist.api_unavailable')
+        await message.answer(text)
         logger.error("Genius API not available - check GENIUS_API_TOKEN")
         return
 
     status_msg = await message.answer(
-        f"🔍 Searching for <b>{html.quote(artist_name)}</b> on Genius..."
+        config.get_message('artist.searching', artist=html.quote(artist_name))
     )
 
     try:
         artist_data = genius.search_artist(artist_name)
 
         if not artist_data:
-            await status_msg.edit_text(
-                f"❌ Artist <b>{html.quote(artist_name)}</b> not found on Genius.\n\n"
-                "Try a different spelling or check the artist name."
-            )
+            text = config.get_message('artist.not_found', artist=html.quote(artist_name))
+            await status_msg.edit_text(text)
             logger.warning(f"Artist not found: {artist_name}")
             return
 
         # ========== ФОРМИРУЕМ СООБЩЕНИЕ ==========
 
-        # Заголовок
         text = f"🎤 <b>{html.quote(artist_data['name'])}</b>\n"
 
         # Альтернативные имена
-        if artist_data.get('alternate_names'):
+        if config.get('genius.include_alternate_names', True) and artist_data.get('alternate_names'):
             alt_names = ", ".join(artist_data['alternate_names'])
             text += f"<i>Also known as: {html.quote(alt_names)}</i>\n"
 
         text += "\n"
 
-        # ========== ОПИСАНИЕ (ИСТОРИЯ) ==========
+        # Описание
         if artist_data.get('description'):
             desc = artist_data['description'].strip()
+            max_length = config.genius_max_description_length
 
-            # Ограничиваем длину описания
-            max_desc_length = 600
-            if len(desc) > max_desc_length:
-                # Находим последнее предложение, которое помещается
-                desc_short = desc[:max_desc_length]
+            if len(desc) > max_length:
+                desc_short = desc[:max_length]
                 last_period = desc_short.rfind('.')
                 if last_period > 0:
                     desc = desc[:last_period + 1]
                 else:
-                    desc = desc[:max_desc_length - 3] + "..."
+                    desc = desc[:max_length - 3] + "..."
 
             text += f"📖 <b>About:</b>\n{html.quote(desc)}\n\n"
 
-        # ========== СТАТИСТИКА ==========
-        stats_parts = []
+        # Статистика
+        if config.get('genius.include_stats', True):
+            stats_parts = []
 
-        if artist_data.get('iq'):
-            iq = artist_data['iq']
-            stats_parts.append(f"🧠 {iq:,} IQ")
+            if artist_data.get('iq'):
+                iq = artist_data['iq']
+                stats_parts.append(f"🧠 {iq:,} IQ")
 
-        if stats_parts:
-            text += " • ".join(stats_parts) + "\n\n"
+            if stats_parts:
+                text += " • ".join(stats_parts) + "\n\n"
 
-        # ========== ПОПУЛЯРНЫЕ ПЕСНИ ==========
+        # Популярные песни
         if artist_data.get('songs'):
             text += "🔥 <b>Popular songs:</b>\n"
             for i, song in enumerate(artist_data['songs'], 1):
                 song_title = html.quote(song['title'])
                 song_url = song['url']
 
-                # Добавляем дату релиза, если есть
                 extra_info = ""
                 if song.get('release_date'):
                     extra_info = f" ({song['release_date']})"
@@ -185,32 +173,27 @@ async def artist_handler(message: types.Message):
                 text += f"{i}. <a href='{song_url}'>{song_title}</a>{extra_info}\n"
             text += "\n"
 
-        # ========== СОЦИАЛЬНЫЕ СЕТИ ==========
-        socials = []
-        if artist_data.get('instagram'):
-            socials.append(f"📸 <a href='https://instagram.com/{artist_data['instagram']}'>Instagram</a>")
-        if artist_data.get('twitter'):
-            socials.append(f"🐦 <a href='https://twitter.com/{artist_data['twitter']}'>Twitter</a>")
-        if artist_data.get('facebook'):
-            socials.append(f"👥 <a href='https://facebook.com/{artist_data['facebook']}'>Facebook</a>")
+        # Социальные сети
+        if config.get('genius.include_social_links', True):
+            socials = []
+            if artist_data.get('instagram'):
+                socials.append(f"📸 <a href='https://instagram.com/{artist_data['instagram']}'>Instagram</a>")
+            if artist_data.get('twitter'):
+                socials.append(f"🐦 <a href='https://twitter.com/{artist_data['twitter']}'>Twitter</a>")
+            if artist_data.get('facebook'):
+                socials.append(f"👥 <a href='https://facebook.com/{artist_data['facebook']}'>Facebook</a>")
 
-        if socials:
-            text += " • ".join(socials) + "\n\n"
+            if socials:
+                text += " • ".join(socials) + "\n\n"
 
-        # ========== ССЫЛКА НА GENIUS ==========
         text += f"🔗 <a href='{artist_data['url']}'>View full profile on Genius</a>"
 
-        # ========== ОТПРАВКА СООБЩЕНИЯ ==========
-
-        # Проверяем длину (Telegram ограничивает caption до 1024 символов)
+        # Отправка
         if len(text) > 1024:
-            # Если слишком длинно, отправляем без фото
             if artist_data.get('image_url'):
                 await message.answer_photo(photo=artist_data['image_url'])
-
             await status_msg.edit_text(text, disable_web_page_preview=False)
         else:
-            # Отправляем с фото
             if artist_data.get('image_url'):
                 try:
                     await message.answer_photo(
@@ -228,28 +211,27 @@ async def artist_handler(message: types.Message):
 
     except Exception as e:
         logger.error(f"Error in artist_handler: {e}", exc_info=True)
-        await status_msg.edit_text(
-            "❌ An error occurred while fetching artist info.\n"
-            "Please try again later."
-        )
+        text = config.get_message('artist.error')
+        await status_msg.edit_text(text)
 
 
 @router.message(lambda msg: msg.text and msg.text.startswith("/") and " " not in msg.text)
 async def unknown_command(message: types.Message):
     """Обработчик неизвестных команд"""
     logger.warning(f"User {message.from_user.id} sent unknown command: {message.text}")
-    await message.answer(MESSAGES["unknown_command"])
+    text = config.get_message('unknown_command')
+    await message.answer(text)
 
 
 @router.message()
 async def text_handler(message: types.Message):
-    """Обработчик текстовых сообщений (поиск музыки)"""
+    """Обработчик текстовых сообщений"""
     if not message.text:
         return
 
     logger.info(f"User {message.from_user.id} searched for: {message.text}")
 
-    await message.answer(MESSAGES["processing"])
+    await message.answer(config.get_message('processing'))
     await asyncio.sleep(1)
 
     await message.answer(
