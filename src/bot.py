@@ -131,26 +131,61 @@ async def artist_handler(message: types.Message):
             logger.warning(f"Artist not found: {artist_name}")
             return
 
-        text = f"🎤 <b>{html.quote(artist_data['name'])}</b>\n\n"
+        # ========== ФОРМИРУЕМ СООБЩЕНИЕ ==========
 
+        # Заголовок
+        text = f"🎤 <b>{html.quote(artist_data['name'])}</b>\n"
+
+        # Альтернативные имена
+        if artist_data.get('alternate_names'):
+            alt_names = ", ".join(artist_data['alternate_names'])
+            text += f"<i>Also known as: {html.quote(alt_names)}</i>\n"
+
+        text += "\n"
+
+        # ========== ОПИСАНИЕ (ИСТОРИЯ) ==========
         if artist_data.get('description'):
-            desc = artist_data['description']
-            if len(desc) > 200:
-                desc = desc[:197] + "..."
-            text += f"📝 {html.quote(desc)}\n\n"
+            desc = artist_data['description'].strip()
 
-        if artist_data.get('followers_count'):
-            followers = artist_data['followers_count']
-            text += f"👥 <b>Followers:</b> {followers:,}\n\n"
+            # Ограничиваем длину описания
+            max_desc_length = 600
+            if len(desc) > max_desc_length:
+                # Находим последнее предложение, которое помещается
+                desc_short = desc[:max_desc_length]
+                last_period = desc_short.rfind('.')
+                if last_period > 0:
+                    desc = desc[:last_period + 1]
+                else:
+                    desc = desc[:max_desc_length - 3] + "..."
 
+            text += f"📖 <b>About:</b>\n{html.quote(desc)}\n\n"
+
+        # ========== СТАТИСТИКА ==========
+        stats_parts = []
+
+        if artist_data.get('iq'):
+            iq = artist_data['iq']
+            stats_parts.append(f"🧠 {iq:,} IQ")
+
+        if stats_parts:
+            text += " • ".join(stats_parts) + "\n\n"
+
+        # ========== ПОПУЛЯРНЫЕ ПЕСНИ ==========
         if artist_data.get('songs'):
             text += "🔥 <b>Popular songs:</b>\n"
             for i, song in enumerate(artist_data['songs'], 1):
                 song_title = html.quote(song['title'])
                 song_url = song['url']
-                text += f"{i}. <a href='{song_url}'>{song_title}</a>\n"
+
+                # Добавляем дату релиза, если есть
+                extra_info = ""
+                if song.get('release_date'):
+                    extra_info = f" ({song['release_date']})"
+
+                text += f"{i}. <a href='{song_url}'>{song_title}</a>{extra_info}\n"
             text += "\n"
 
+        # ========== СОЦИАЛЬНЫЕ СЕТИ ==========
         socials = []
         if artist_data.get('instagram'):
             socials.append(f"📸 <a href='https://instagram.com/{artist_data['instagram']}'>Instagram</a>")
@@ -162,20 +197,32 @@ async def artist_handler(message: types.Message):
         if socials:
             text += " • ".join(socials) + "\n\n"
 
-        text += f"🔗 <a href='{artist_data['url']}'>View on Genius</a>"
+        # ========== ССЫЛКА НА GENIUS ==========
+        text += f"🔗 <a href='{artist_data['url']}'>View full profile on Genius</a>"
 
-        if artist_data.get('image_url'):
-            try:
-                await message.answer_photo(
-                    photo=artist_data['image_url'],
-                    caption=text
-                )
-                await status_msg.delete()
-            except Exception as e:
-                logger.warning(f"Failed to send photo: {e}")
-                await status_msg.edit_text(text)
+        # ========== ОТПРАВКА СООБЩЕНИЯ ==========
+
+        # Проверяем длину (Telegram ограничивает caption до 1024 символов)
+        if len(text) > 1024:
+            # Если слишком длинно, отправляем без фото
+            if artist_data.get('image_url'):
+                await message.answer_photo(photo=artist_data['image_url'])
+
+            await status_msg.edit_text(text, disable_web_page_preview=False)
         else:
-            await status_msg.edit_text(text)
+            # Отправляем с фото
+            if artist_data.get('image_url'):
+                try:
+                    await message.answer_photo(
+                        photo=artist_data['image_url'],
+                        caption=text
+                    )
+                    await status_msg.delete()
+                except Exception as e:
+                    logger.warning(f"Failed to send photo: {e}")
+                    await status_msg.edit_text(text)
+            else:
+                await status_msg.edit_text(text)
 
         logger.info(f"Artist info sent successfully: {artist_data['name']}")
 

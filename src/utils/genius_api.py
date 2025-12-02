@@ -1,5 +1,3 @@
-# src/utils/genius_api.py
-
 import os
 import requests
 from typing import Optional, Dict, Any, List
@@ -14,12 +12,6 @@ class GeniusClient:
     BASE_URL = "https://api.genius.com"
 
     def __init__(self, api_token: Optional[str] = None):
-        """
-        Инициализация клиента Genius
-
-        Args:
-            api_token: API токен Genius (если None, берётся из переменных окружения)
-        """
         self.api_token = api_token or os.getenv("GENIUS_API_TOKEN")
 
         if not self.api_token:
@@ -29,7 +21,8 @@ class GeniusClient:
 
         self.headers = {
             "Authorization": f"Bearer {self.api_token}",
-            "User-Agent": "MusicFinderBot/1.0"
+            "User-Agent": "MusicFinderBot/1.0",
+            "Accept": "application/json"
         }
         self.available = True
 
@@ -40,15 +33,7 @@ class GeniusClient:
         return self.available
 
     def search(self, query: str) -> Optional[List[Dict[str, Any]]]:
-        """
-        Поиск по Genius
-
-        Args:
-            query: Поисковый запрос
-
-        Returns:
-            Список найденных результатов или None при ошибке
-        """
+        """Поиск по Genius"""
         try:
             url = f"{self.BASE_URL}/search"
             params = {"q": query}
@@ -76,22 +61,29 @@ class GeniusClient:
             logger.error(f"Unexpected error in search: {e}", exc_info=True)
             return None
 
-    def get_artist(self, artist_id: int) -> Optional[Dict[str, Any]]:
+    def get_artist(self, artist_id: int, text_format: str = "plain") -> Optional[Dict[str, Any]]:
         """
         Получить информацию об артисте по ID
 
         Args:
             artist_id: ID артиста в Genius
+            text_format: Формат текста ('plain', 'html', 'dom')
 
         Returns:
             Информация об артисте или None
         """
         try:
             url = f"{self.BASE_URL}/artists/{artist_id}"
+            params = {"text_format": text_format}
 
             logger.info(f"Fetching artist info for ID: {artist_id}")
 
-            response = requests.get(url, headers=self.headers, timeout=10)
+            response = requests.get(
+                url,
+                headers=self.headers,
+                params=params,
+                timeout=10
+            )
             response.raise_for_status()
 
             data = response.json()
@@ -117,17 +109,7 @@ class GeniusClient:
         sort: str = "popularity",
         per_page: int = 5
     ) -> Optional[List[Dict[str, Any]]]:
-        """
-        Получить песни артиста
-
-        Args:
-            artist_id: ID артиста
-            sort: Сортировка ('title' или 'popularity')
-            per_page: Количество песен
-
-        Returns:
-            Список песен или None
-        """
+        """Получить песни артиста"""
         try:
             url = f"{self.BASE_URL}/artists/{artist_id}/songs"
             params = {
@@ -158,15 +140,30 @@ class GeniusClient:
             logger.error(f"Unexpected error in get_artist_songs: {e}", exc_info=True)
             return None
 
+    def _extract_description(self, description_data: Any) -> Optional[str]:
+        """Извлечь текст описания из разных форматов"""
+        if not description_data:
+            return None
+
+        # Если это словарь с ключом 'plain'
+        if isinstance(description_data, dict):
+            return description_data.get('plain') or description_data.get('html')
+
+        # Если это строка
+        if isinstance(description_data, str):
+            return description_data
+
+        return None
+
     def search_artist(self, artist_name: str) -> Optional[Dict[str, Any]]:
         """
-        Поиск артиста по имени
+        Поиск артиста по имени с полной информацией
 
         Args:
             artist_name: Имя артиста
 
         Returns:
-            Данные артиста с песнями или None
+            Полные данные артиста с биографией и песнями
         """
         try:
             # Шаг 1: Поиск по имени
@@ -193,8 +190,8 @@ class GeniusClient:
 
             logger.info(f"Found artist: {artist_name_found} (ID: {artist_id})")
 
-            # Шаг 3: Получаем полную информацию об артисте
-            artist_full = self.get_artist(artist_id)
+            # Шаг 3: Получаем полную информацию об артисте (с plain text описанием)
+            artist_full = self.get_artist(artist_id, text_format="plain")
 
             if not artist_full:
                 # Если не получилось — используем данные из поиска
@@ -207,17 +204,22 @@ class GeniusClient:
                 per_page=5
             )
 
-            # Шаг 5: Формируем результат
+            # Шаг 5: Извлекаем описание
+            description = self._extract_description(artist_full.get("description"))
+
+            # Шаг 6: Формируем результат
             result = {
                 "name": artist_full.get("name"),
                 "id": artist_full.get("id"),
                 "url": artist_full.get("url"),
                 "image_url": artist_full.get("image_url") or artist_full.get("header_image_url"),
-                "description": artist_full.get("description", {}).get("plain") if isinstance(artist_full.get("description"), dict) else artist_full.get("description"),
+                "description": description,
+                "alternate_names": artist_full.get("alternate_names", []),
                 "facebook": artist_full.get("facebook_name"),
                 "instagram": artist_full.get("instagram_name"),
                 "twitter": artist_full.get("twitter_name"),
                 "followers_count": artist_full.get("followers_count"),
+                "iq": artist_full.get("iq"),  # IQ на Genius (репутация)
                 "songs": []
             }
 
@@ -228,12 +230,13 @@ class GeniusClient:
                         "title": song.get("title"),
                         "url": song.get("url"),
                         "artist": song.get("primary_artist", {}).get("name"),
-                        "pageviews": song.get("stats", {}).get("pageviews")
+                        "pageviews": song.get("stats", {}).get("pageviews"),
+                        "release_date": song.get("release_date_for_display")
                     })
 
             result["song_count"] = len(result["songs"])
 
-            logger.info(f"Successfully fetched artist data for: {result['name']}")
+            logger.info(f"Successfully fetched full artist data for: {result['name']}")
             return result
 
         except Exception as e:
