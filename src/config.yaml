@@ -2,6 +2,7 @@ bot:
   name: "Music Finder Bot"
   description: "Telegram bot for searching and sending music files."
   language: "en"
+  version: "1.0.0"
 
 messages:
   start: |
@@ -13,12 +14,53 @@ messages:
     <b>Available commands:</b>
     /start — greetings
     /help — this help message
+    /artist &lt;name&gt; — get artist info from Genius
+
     Just send any song name to get the file.
+
+  about: |
+    🎵 <b>Music Finder Bot v{version}</b>
+
+    This bot helps you find music and information about artists.
+
+    <b>Features:</b>
+    • Search for music in database
+    • Get detailed artist information
+    • View popular songs
+
+    Made with ❤️ using Aiogram 3
 
   unknown_command: "I don't know this command yet 😅"
   processing: "Searching for your track, please wait… 🔎"
   not_found: "Sorry, I couldn't find this song 😔"
   error: "Unexpected error occurred. Try again later."
+
+  # Сообщения для команды /artist
+  artist:
+    usage: |
+      ℹ️ <b>Usage:</b>
+      /artist <b>&lt;artist name&gt;</b>
+
+      <b>Examples:</b>
+      /artist The Weeknd
+      /artist My Bloody Valentine
+      /artist Radiohead
+
+    searching: "🔍 Searching for <b>{artist}</b> on Genius..."
+    not_found: |
+      ❌ Artist <b>{artist}</b> not found on Genius.
+
+      Try a different spelling or check the artist name.
+
+    api_unavailable: |
+      ⚠️ <b>Genius API is currently unavailable</b>
+
+      Artist search feature is temporarily disabled.
+      Please contact the administrator.
+
+    error: |
+      ❌ An error occurred while fetching artist info.
+      Please try again later.
 
 search:
   max_results: 5
@@ -39,10 +81,21 @@ features:
   send_audio: true
   inline_search: false
   upload_enabled: false
+  artist_search: true  # Включить/выключить поиск артистов
+
+# Настройки для Genius API
+genius:
+  enabled: true
+  max_songs: 5              # Количество песен в выдаче
+  max_description_length: 600  # Максимальная длина описания
+  include_alternate_names: true
+  include_social_links: true
+  include_stats: true
+  text_format: "plain"      # plain, html, dom
 
 logging:
   level: "INFO"
-  log_to_cosole: true
+  log_to_console: true     # Исправлена опечатка
   log_to_file: true
   file_path: "logs/bot.log"
   max_file_size_mb: 10
