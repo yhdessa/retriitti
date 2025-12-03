@@ -293,7 +293,7 @@ async def main():
         # Очистка при остановке
         await on_shutdown()
         await bot.session.close()
-        logger.info("👋 Bot stopped")
+        logger.info("==👋 Bot stopped==")
 
 
 if __name__ == "__main__":
