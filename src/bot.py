@@ -249,7 +249,7 @@ async def unknown_command(message: types.Message):
 
 async def on_startup():
     """Действия при запуске бота"""
-    logger.info("🔧 Initializing database...")
+    logger.info("==🔧 Initializing database...==")
     try:
         await init_db()
         logger.info("✅ Database initialized successfully")
