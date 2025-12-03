@@ -3,7 +3,8 @@ bot:
   description: "Telegram bot for searching and sending music files."
   language: "en"
   version: "1.0.0"
-
+  admins:
+    - 7971307520  # ID
 messages:
   start: |
     Hello, <b>{user}</b>! 👋
@@ -15,8 +16,15 @@ messages:
     /start — greetings
     /help — this help message
     /artist &lt;name&gt; — get artist info from Genius
+    /stats — show database statistics
 
-    Just send any song name to get the file.
+    Just send any song name to search in the database.
+
+  help_admin: |
+    <b>👑 Admin commands:</b>
+    /upload — enable upload mode (send audio files to add to database)
+    /cancel — cancel upload mode
+    /stats — database statistics
 
   about: |
     🎵 <b>Music Finder Bot v{version}</b>
@@ -35,7 +43,58 @@ messages:
   not_found: "Sorry, I couldn't find this song 😔"
   error: "Unexpected error occurred. Try again later."
 
-  # Сообщения для команды /artist
+  # Сообщения для загрузки треков
+  upload:
+    mode_enabled: |
+      📤 <b>Upload mode enabled!</b>
+
+      Send me audio files to add them to the database.
+      I will extract metadata automatically.
+
+      Send /cancel to exit upload mode.
+
+    mode_disabled: "❌ Upload mode disabled."
+
+    success: |
+      ✅ <b>Track added to database!</b>
+
+      🎵 <b>Title:</b> {title}
+      👤 <b>Artist:</b> {artist}
+      🎼 <b>Genre:</b> {genre}
+      ⏱ <b>Duration:</b> {duration}
+      🆔 <b>Track ID:</b> {track_id}
+
+    invalid_audio: "❌ Please send a valid audio file."
+    not_admin: "⛔️ You don't have permission to upload tracks."
+    error: "❌ Error while saving track to database. Try again."
+
+  # Сообщения для поиска
+  search:
+    found_multiple: |
+      🎵 <b>Found {count} tracks:</b>
+
+      {results}
+
+      Send the number to get the track.
+
+    found_single: "🎵 Found track: <b>{title}</b> by <b>{artist}</b>"
+
+    no_results: |
+      ❌ No tracks found for "<b>{query}</b>"
+
+      Try a different search query or check spelling.
+
+  # Статистика
+  stats:
+    info: |
+      📊 <b>Database Statistics</b>
+
+      🎵 Total tracks: {total_tracks}
+      👥 Unique artists: {unique_artists}
+      🎼 Genres: {genres_count}
+      📅 Last upload: {last_upload}
+
+  # Сообщения для артистов
   artist:
     usage: |
       ℹ️ <b>Usage:</b>
@@ -69,6 +128,9 @@ search:
 
 database:
   url: "postgresql+asyncpg://musicbot:musicpass@db:5432/musicdb"
+  pool_size: 10
+  max_overflow: 20
+  echo: false  # Логировать SQL запросы (для отладки)
 
 file_limits:
   max_file_size_mb: 20
@@ -76,26 +138,28 @@ file_limits:
     - mp3
     - wav
     - flac
+    - m4a
+    - ogg
 
 features:
   send_audio: true
   inline_search: false
-  upload_enabled: false
-  artist_search: true  # Включить/выключить поиск артистов
+  upload_enabled: true
+  artist_search: true
 
 # Настройки для Genius API
 genius:
   enabled: true
-  max_songs: 5              # Количество песен в выдаче
-  max_description_length: 600  # Максимальная длина описания
+  max_songs: 5
+  max_description_length: 600
   include_alternate_names: true
   include_social_links: true
   include_stats: true
-  text_format: "plain"      # plain, html, dom
+  text_format: "plain"
 
 logging:
   level: "INFO"
-  log_to_console: true     # Исправлена опечатка
+  log_to_console: true
   log_to_file: true
   file_path: "logs/bot.log"
   max_file_size_mb: 10
