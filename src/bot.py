@@ -6,9 +6,16 @@ from aiogram import Bot, Dispatcher, types, Router, html
 from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import CommandStart, Command
 
+# Импорты из utils
 from utils.logger import setup_logger, get_logger
 from utils.genius_api import get_genius_client
 from utils.config import setup_config, get_config
+
+# Импорты handlers
+from handlers import upload, search
+
+# Импорты из db
+from db import init_db, close_db
 
 # ========== ЗАГРУЗКА КОНФИГУРАЦИИ ==========
 
@@ -54,7 +61,18 @@ bot = Bot(
 )
 dp = Dispatcher()
 router = Router()
-dp.include_router(router)
+
+# Подключаем роутеры из handlers
+dp.include_router(upload.router)  # Загрузка треков
+dp.include_router(search.router)  # Поиск треков
+dp.include_router(router)  # Основные команды
+
+# ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
+
+def is_admin(user_id: int) -> bool:
+    """Проверка, является ли пользователь администратором"""
+    admins = config.get('bot.admins', [])
+    return user_id in admins
 
 # ========== ОБРАБОТЧИКИ ==========
 
@@ -70,7 +88,14 @@ async def start_handler(message: types.Message):
 async def help_handler(message: types.Message):
     """Обработчик команды /help"""
     logger.info(f"User {message.from_user.id} requested help")
+
+    # Базовая справка
     text = config.get_message('help')
+
+    # Если администратор — добавляем админские команды
+    if is_admin(message.from_user.id):
+        text += "\n\n" + config.get_message('help_admin')
+
     await message.answer(text)
 
 
@@ -86,7 +111,6 @@ async def about_handler(message: types.Message):
 async def artist_handler(message: types.Message):
     """Обработчик команды /artist <имя артиста>"""
 
-    # Проверяем, включена ли функция
     if not config.genius_enabled:
         await message.answer("⚠️ This feature is currently disabled.")
         return
@@ -122,18 +146,15 @@ async def artist_handler(message: types.Message):
             logger.warning(f"Artist not found: {artist_name}")
             return
 
-        # ========== ФОРМИРУЕМ СООБЩЕНИЕ ==========
-
+        # Формируем сообщение
         text = f"🎤 <b>{html.quote(artist_data['name'])}</b>\n"
 
-        # Альтернативные имена
         if config.get('genius.include_alternate_names', True) and artist_data.get('alternate_names'):
             alt_names = ", ".join(artist_data['alternate_names'])
             text += f"<i>Also known as: {html.quote(alt_names)}</i>\n"
 
         text += "\n"
 
-        # Описание
         if artist_data.get('description'):
             desc = artist_data['description'].strip()
             max_length = config.genius_max_description_length
@@ -148,9 +169,12 @@ async def artist_handler(message: types.Message):
 
             text += f"📖 <b>About:</b>\n{html.quote(desc)}\n\n"
 
-        # Статистика
         if config.get('genius.include_stats', True):
             stats_parts = []
+
+            if artist_data.get('followers_count'):
+                followers = artist_data['followers_count']
+                stats_parts.append(f"👥 {followers:,} followers")
 
             if artist_data.get('iq'):
                 iq = artist_data['iq']
@@ -159,7 +183,6 @@ async def artist_handler(message: types.Message):
             if stats_parts:
                 text += " • ".join(stats_parts) + "\n\n"
 
-        # Популярные песни
         if artist_data.get('songs'):
             text += "🔥 <b>Popular songs:</b>\n"
             for i, song in enumerate(artist_data['songs'], 1):
@@ -173,7 +196,6 @@ async def artist_handler(message: types.Message):
                 text += f"{i}. <a href='{song_url}'>{song_title}</a>{extra_info}\n"
             text += "\n"
 
-        # Социальные сети
         if config.get('genius.include_social_links', True):
             socials = []
             if artist_data.get('instagram'):
@@ -223,28 +245,28 @@ async def unknown_command(message: types.Message):
     await message.answer(text)
 
 
-@router.message()
-async def text_handler(message: types.Message):
-    """Обработчик текстовых сообщений"""
-    if not message.text:
-        return
-
-    logger.info(f"User {message.from_user.id} searched for: {message.text}")
-
-    await message.answer(config.get_message('processing'))
-    await asyncio.sleep(1)
-
-    await message.answer(
-        "🎵 <b>Demo mode</b>\n\n"
-        "Music search not implemented yet.\n"
-        "Your search query:\n\n"
-        f"<i>{html.quote(message.text)}</i>\n\n"
-        "Coming soon: database integration! 🚀\n\n"
-        "Try /artist &lt;name&gt; to search for artist info!"
-    )
-
-
 # ========== ЗАПУСК БОТА ==========
+
+async def on_startup():
+    """Действия при запуске бота"""
+    logger.info("🔧 Initializing database...")
+    try:
+        await init_db()
+        logger.info("✅ Database initialized successfully")
+    except Exception as e:
+        logger.error(f"❌ Database initialization failed: {e}", exc_info=True)
+        raise
+
+
+async def on_shutdown():
+    """Действия при остановке бота"""
+    logger.info("🔧 Closing database connection...")
+    try:
+        await close_db()
+        logger.info("✅ Database connection closed")
+    except Exception as e:
+        logger.error(f"❌ Error closing database: {e}", exc_info=True)
+
 
 async def main():
     """Основная функция запуска бота"""
@@ -253,14 +275,23 @@ async def main():
     logger.info("=" * 60)
 
     try:
+        # Инициализация при запуске
+        await on_startup()
+
+        # Удаляем webhook
         await bot.delete_webhook(drop_pending_updates=True)
         logger.info("✅ Webhook deleted")
 
+        # Запускаем polling
         await dp.start_polling(bot)
+
     except Exception as e:
         logger.error(f"❌ Error during polling: {e}", exc_info=True)
         raise
+
     finally:
+        # Очистка при остановке
+        await on_shutdown()
         await bot.session.close()
         logger.info("👋 Bot stopped")
 
