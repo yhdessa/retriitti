@@ -86,16 +86,14 @@ async def start_handler(message: types.Message):
 
 @router.message(Command("help"))
 async def help_handler(message: types.Message):
-    """Обработчик команды /help"""
     logger.info(f"User {message.from_user.id} requested help")
-
-    # Базовая справка
     text = config.get_message('help')
-
-    # Если администратор — добавляем админские команды
+    text = text.replace(
+        "/stats — show database statistics",
+        "/browse — browse all artists\n    /stats — show database statistics"
+    )
     if is_admin(message.from_user.id):
         text += "\n\n" + config.get_message('help_admin')
-
     await message.answer(text)
 
 
@@ -249,7 +247,7 @@ async def unknown_command(message: types.Message):
 
 async def on_startup():
     """Действия при запуске бота"""
-    logger.info("==🔧 Initializing database...==")
+    logger.info("🔧 Initializing database...")
     try:
         await init_db()
         logger.info("✅ Database initialized successfully")

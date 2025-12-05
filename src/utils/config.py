@@ -106,6 +106,15 @@ class Config:
         """Максимальная длина описания артиста"""
         return self.get('genius.max_description_length', 600)
 
+    @property
+    def albums_per_page(self) -> int:
+        """Количество альбомов на странице"""
+        return self.get('pagination.albums_per_page', 5)
+
+    @property
+    def tracks_per_page(self) -> int:
+        """Количество треков на странице"""
+        return self.get('pagination.tracks_per_page', 8)
 
 # Глобальный экземпляр конфига
 _config: Optional[Config] = None

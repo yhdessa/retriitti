@@ -5,6 +5,9 @@ from .crud import (
     search_tracks,
     get_track_by_id,
     get_track_by_file_id,
+    get_albums_by_artist,
+    get_tracks_by_album,
+    get_all_artists,
     get_stats
 )
 
@@ -19,5 +22,8 @@ __all__ = [
     'search_tracks',
     'get_track_by_id',
     'get_track_by_file_id',
+    'get_albums_by_artist',
+    'get_tracks_by_album',
+    'get_all_artists',
     'get_stats'
 ]

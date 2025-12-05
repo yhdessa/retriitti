@@ -13,6 +13,7 @@ class Track(Base):
     track_id = Column(Integer, primary_key=True, autoincrement=True)
     title = Column(Text, nullable=False, index=True)
     artist = Column(Text, nullable=False, index=True)
+    album = Column(Text, nullable=True, index=True)  # ← НОВОЕ
     genre = Column(Text, nullable=True)
     file_id = Column(Text, nullable=False, unique=True)
     duration = Column(Integer, nullable=True)
@@ -28,6 +29,7 @@ class Track(Base):
             'track_id': self.track_id,
             'title': self.title,
             'artist': self.artist,
+            'album': self.album,
             'genre': self.genre,
             'file_id': self.file_id,
             'duration': self.duration,

@@ -1,4 +1,4 @@
-from aiogram import Router, types, F
+from aiogram import Router, types, F, html
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -10,12 +10,10 @@ logger = get_logger(__name__)
 router = Router()
 
 class UploadStates(StatesGroup):
-    """Состояния для загрузки треков"""
     waiting_for_audio = State()
 
 
 def is_admin(user_id: int) -> bool:
-    """Проверка, является ли пользователь администратором"""
     config = get_config()
     admins = config.get('bot.admins', [])
     return user_id in admins
@@ -23,7 +21,6 @@ def is_admin(user_id: int) -> bool:
 
 @router.message(Command("upload"))
 async def upload_command(message: types.Message, state: FSMContext):
-    """Включить режим загрузки треков"""
     config = get_config()
 
     if not is_admin(message.from_user.id):
@@ -38,7 +35,6 @@ async def upload_command(message: types.Message, state: FSMContext):
 
 @router.message(Command("cancel"))
 async def cancel_upload(message: types.Message, state: FSMContext):
-    """Отменить режим загрузки"""
     config = get_config()
     current_state = await state.get_state()
 
@@ -65,9 +61,11 @@ async def handle_audio_upload(message: types.Message, state: FSMContext):
     artist = audio.performer or "Unknown Artist"
     duration = audio.duration
     file_id = audio.file_id
+
+    album = getattr(audio, 'album', None)
     genre = None
 
-    logger.info(f"Received audio: {title} by {artist} (file_id: {file_id[:20]}...)")
+    logger.info(f"Received audio: {title} by {artist} (album: {album}, file_id: {file_id[:20]}...)")
 
     try:
         async for session in get_session():
@@ -75,6 +73,7 @@ async def handle_audio_upload(message: types.Message, state: FSMContext):
                 session=session,
                 title=title,
                 artist=artist,
+                album=album,
                 file_id=file_id,
                 genre=genre,
                 duration=duration
@@ -82,16 +81,17 @@ async def handle_audio_upload(message: types.Message, state: FSMContext):
 
             duration_str = track.duration_formatted()
 
-            await message.answer(
-                config.get_message(
-                    'upload.success',
-                    title=title,
-                    artist=artist,
-                    genre=genre or "Not specified",
-                    duration=duration_str,
-                    track_id=track.track_id
-                )
-            )
+            response_text = f"✅ <b>Track added to database!</b>\n\n"
+            response_text += f"🎵 <b>Title:</b> {html.quote(title)}\n"
+            response_text += f"👤 <b>Artist:</b> {html.quote(artist)}\n"
+            if album:
+                response_text += f"💿 <b>Album:</b> {html.quote(album)}\n"
+            if genre:
+                response_text += f"🎼 <b>Genre:</b> {genre}\n"
+            response_text += f"⏱ <b>Duration:</b> {duration_str}\n"
+            response_text += f"🆔 <b>Track ID:</b> {track.track_id}"
+
+            await message.answer(response_text)
 
             logger.info(f"Track {track.track_id} saved successfully")
 
@@ -102,6 +102,5 @@ async def handle_audio_upload(message: types.Message, state: FSMContext):
 
 @router.message(UploadStates.waiting_for_audio)
 async def handle_invalid_upload(message: types.Message):
-    """Обработка неправильного типа файла"""
     config = get_config()
     await message.answer(config.get_message('upload.invalid_audio'))
