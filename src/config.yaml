@@ -3,6 +3,8 @@ bot:
   description: "Telegram bot for searching and sending music files."
   language: "en"
   version: "1.0.0"
+  admins:
+    - 7971307520
 
 messages:
   start: |
