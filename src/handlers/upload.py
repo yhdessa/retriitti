@@ -2,7 +2,7 @@ from aiogram import Router, types, F, html
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from utils.config import get_config  # Импортируем функцию
+from utils.config import get_config
 from utils.logger import get_logger
 from db import get_session, add_track
 
@@ -48,7 +48,6 @@ async def cancel_upload(message: types.Message, state: FSMContext):
 
 @router.message(UploadStates.waiting_for_audio, F.audio)
 async def handle_audio_upload(message: types.Message, state: FSMContext):
-    """Обработка загруженного аудио"""
     config = get_config()
 
     if not is_admin(message.from_user.id):

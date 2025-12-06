@@ -9,7 +9,7 @@ from db import (
     get_track_by_id,
     get_albums_by_artist,
     get_tracks_by_album,
-    get_all_artists,  # ← Импортируем из db, а не определяем здесь!
+    get_all_artists,
     get_stats
 )
 
@@ -18,7 +18,6 @@ router = Router()
 
 @router.message(Command("stats"))
 async def stats_command(message: types.Message):
-    """Показать статистику базы данных"""
     config = get_config()
 
     try:
@@ -48,7 +47,6 @@ async def stats_command(message: types.Message):
 
 @router.message(F.text & ~F.text.startswith('/'))
 async def search_handler(message: types.Message):
-    """Поиск треков/артистов по тексту"""
     config = get_config()
     query = message.text.strip()
 
@@ -62,20 +60,17 @@ async def search_handler(message: types.Message):
 
     try:
         async for session in get_session():
-            # 1. Проверяем альбомы артиста
             albums = await get_albums_by_artist(session, query)
 
             if albums:
-                # Нашли альбомы — показываем их
                 logger.info(f"Found {len(albums)} albums for artist: {query}")
                 await show_albums(message, query, albums, page=0)
                 return
 
-            # 2. Если альбомов нет — ищем треки
             tracks = await search_tracks(
                 session=session,
                 query=query,
-                limit=50  # Увеличенный лимит для артистов
+                limit=50
             )
 
             if not tracks:
@@ -85,22 +80,18 @@ async def search_handler(message: types.Message):
                 logger.info(f"No results for query: {query}")
                 return
 
-            # 3. Проверяем, это поиск артиста или трека
             artist_tracks = [t for t in tracks if query.lower() in t.artist.lower()]
 
             if len(artist_tracks) >= 5:
-                # Много треков одного артиста — показываем все
                 logger.info(f"Found {len(artist_tracks)} tracks for artist: {query}")
                 await show_artist_tracks_no_albums(message, query, artist_tracks[:30])
                 return
 
-            # 4. Если один трек — отправляем сразу
             if len(tracks) == 1:
                 await send_track(message, tracks[0])
                 logger.info(f"Sent single track: {tracks[0].track_id}")
                 return
 
-            # 5. Показываем список треков
             tracks = tracks[:config.get('search.max_results', 5)]
             await show_track_list(message, tracks, query)
 
@@ -108,11 +99,7 @@ async def search_handler(message: types.Message):
         logger.error(f"Error during search: {e}", exc_info=True)
         await message.answer(config.get_message('error'))
 
-
-# ========== СОЗДАНИЕ КЛАВИАТУР ==========
-
 def create_track_keyboard(tracks: list, query: str = None) -> InlineKeyboardMarkup:
-    """Создать клавиатуру для выбора трека"""
     buttons = []
 
     for i, track in enumerate(tracks, 1):
@@ -131,7 +118,6 @@ def create_track_keyboard(tracks: list, query: str = None) -> InlineKeyboardMark
 
 
 def create_albums_keyboard(artist: str, albums: list, page: int = 0) -> InlineKeyboardMarkup:
-    """Создать клавиатуру с альбомами (с пагинацией)"""
     config = get_config()
     per_page = config.get('pagination.albums_per_page', 5)
 
@@ -141,7 +127,6 @@ def create_albums_keyboard(artist: str, albums: list, page: int = 0) -> InlineKe
 
     buttons = []
 
-    # Кнопки альбомов
     for album in albums[start_idx:end_idx]:
         buttons.append([
             InlineKeyboardButton(
@@ -150,7 +135,6 @@ def create_albums_keyboard(artist: str, albums: list, page: int = 0) -> InlineKe
             )
         ])
 
-    # Навигация
     nav_buttons = []
     if page > 0:
         nav_buttons.append(
@@ -173,7 +157,6 @@ def create_albums_keyboard(artist: str, albums: list, page: int = 0) -> InlineKe
 
 
 def create_album_tracks_keyboard(artist: str, album: str, tracks: list, page: int = 0) -> InlineKeyboardMarkup:
-    """Создать клавиатуру с треками альбома"""
     config = get_config()
     per_page = config.get('pagination.tracks_per_page', 8)
 
@@ -183,7 +166,6 @@ def create_album_tracks_keyboard(artist: str, album: str, tracks: list, page: in
 
     buttons = []
 
-    # Кнопки треков
     for i, track in enumerate(tracks[start_idx:end_idx], start_idx + 1):
         buttons.append([
             InlineKeyboardButton(
@@ -192,7 +174,6 @@ def create_album_tracks_keyboard(artist: str, album: str, tracks: list, page: in
             )
         ])
 
-    # Навигация
     nav_buttons = []
     if page > 0:
         nav_buttons.append(
@@ -211,18 +192,14 @@ def create_album_tracks_keyboard(artist: str, album: str, tracks: list, page: in
     if len(nav_buttons) > 1:
         buttons.append(nav_buttons)
 
-    # Кнопка "Назад"
     buttons.append([
         InlineKeyboardButton(text="🔙 Back to albums", callback_data=f"back_to_albums:{artist}:0")
     ])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-# ========== КОМАНДА /BROWSE ==========
-
 @router.message(Command("browse"))
 async def browse_command(message: types.Message):
-    """Показать список всех артистов"""
     logger.info(f"User {message.from_user.id} requested artist list")
 
     try:
@@ -244,27 +221,13 @@ async def browse_command(message: types.Message):
         await message.answer("❌ Error loading artists list.")
 
 
-# ========== СОЗДАНИЕ КЛАВИАТУРЫ С АРТИСТАМИ ==========
-
 def create_artists_keyboard(artists: list, page: int = 0, per_page: int = 10) -> InlineKeyboardMarkup:
-    """
-    Создать клавиатуру со списком артистов (с пагинацией)
-
-    Args:
-        artists: Список артистов
-        page: Текущая страница
-        per_page: Количество артистов на странице
-
-    Returns:
-        InlineKeyboardMarkup: Клавиатура с кнопками
-    """
     total_pages = (len(artists) - 1) // per_page + 1
     start_idx = page * per_page
     end_idx = start_idx + per_page
 
     buttons = []
 
-    # Кнопки артистов
     for artist in artists[start_idx:end_idx]:
         buttons.append([
             InlineKeyboardButton(
@@ -273,7 +236,6 @@ def create_artists_keyboard(artists: list, page: int = 0, per_page: int = 10) ->
             )
         ])
 
-    # Навигация
     nav_buttons = []
     if page > 0:
         nav_buttons.append(
@@ -296,7 +258,6 @@ def create_artists_keyboard(artists: list, page: int = 0, per_page: int = 10) ->
 
 
 async def show_artists_list(message: types.Message, artists: list, page: int = 0):
-    """Показать список артистов"""
     text = f"🎤 <b>Artists in Database</b>\n\n"
     text += f"📊 <b>Total artists:</b> {len(artists)}\n\n"
     text += "Select an artist to view their music:"
@@ -305,11 +266,8 @@ async def show_artists_list(message: types.Message, artists: list, page: int = 0
     await message.answer(text, reply_markup=keyboard)
 
 
-# ========== ОБРАБОТЧИКИ CALLBACK ДЛЯ BROWSE ==========
-
 @router.callback_query(F.data.startswith("artists_page:"))
 async def handle_artists_pagination(callback: CallbackQuery):
-    """Обработка пагинации списка артистов"""
     page = int(callback.data.split(":")[1])
 
     try:
@@ -335,10 +293,6 @@ async def handle_artists_pagination(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("browse_artist:"))
 async def handle_browse_artist(callback: CallbackQuery):
-    """
-    Обработка выбора артиста из списка /browse
-    Показывает альбомы или треки артиста
-    """
     parts = callback.data.split(":", 2)
     artist = parts[1]
     page = int(parts[2]) if len(parts) > 2 else 0
@@ -347,11 +301,9 @@ async def handle_browse_artist(callback: CallbackQuery):
 
     try:
         async for session in get_session():
-            # Проверяем, есть ли альбомы
             albums = await get_albums_by_artist(session, artist)
 
             if albums:
-                # Показываем альбомы
                 text = f"🎤 <b>{html.quote(artist)}</b>\n\n"
                 text += f"💿 <b>{len(albums)} albums:</b>\n"
                 text += "Select an album to view tracks:"
@@ -361,7 +313,6 @@ async def handle_browse_artist(callback: CallbackQuery):
                 await callback.message.edit_text(text, reply_markup=keyboard)
                 await callback.answer()
             else:
-                # Нет альбомов — показываем все треки
                 tracks = await search_tracks(session, artist, limit=100)
 
                 if tracks:
@@ -380,18 +331,13 @@ async def handle_browse_artist(callback: CallbackQuery):
         logger.error(f"Error browsing artist: {e}", exc_info=True)
         await callback.answer("❌ Error loading artist", show_alert=True)
 
-
-# ========== КЛАВИАТУРЫ С КНОПКОЙ "НАЗАД К АРТИСТАМ" ==========
-
 def create_albums_keyboard_with_back(artist: str, albums: list, page: int = 0, per_page: int = 5) -> InlineKeyboardMarkup:
-    """Клавиатура альбомов с кнопкой возврата к списку артистов"""
     total_pages = (len(albums) - 1) // per_page + 1
     start_idx = page * per_page
     end_idx = start_idx + per_page
 
     buttons = []
 
-    # Кнопки альбомов
     for album in albums[start_idx:end_idx]:
         buttons.append([
             InlineKeyboardButton(
@@ -400,7 +346,6 @@ def create_albums_keyboard_with_back(artist: str, albums: list, page: int = 0, p
             )
         ])
 
-    # Навигация
     nav_buttons = []
     if page > 0:
         nav_buttons.append(
@@ -419,7 +364,6 @@ def create_albums_keyboard_with_back(artist: str, albums: list, page: int = 0, p
     if len(nav_buttons) > 1:
         buttons.append(nav_buttons)
 
-    # Кнопка "Назад к артистам"
     buttons.append([
         InlineKeyboardButton(text="🔙 Back to Artists", callback_data="back_to_artists:0")
     ])
@@ -428,14 +372,12 @@ def create_albums_keyboard_with_back(artist: str, albums: list, page: int = 0, p
 
 
 def create_artist_tracks_keyboard_with_back(tracks: list, page: int = 0, per_page: int = 10) -> InlineKeyboardMarkup:
-    """Клавиатура треков с кнопкой возврата к списку артистов"""
     total_pages = (len(tracks) - 1) // per_page + 1
     start_idx = page * per_page
     end_idx = start_idx + per_page
 
     buttons = []
 
-    # Кнопки треков
     for i, track in enumerate(tracks[start_idx:end_idx], start_idx + 1):
         buttons.append([
             InlineKeyboardButton(
@@ -444,7 +386,6 @@ def create_artist_tracks_keyboard_with_back(tracks: list, page: int = 0, per_pag
             )
         ])
 
-    # Навигация
     nav_buttons = []
     if page > 0:
         nav_buttons.append(
@@ -463,7 +404,6 @@ def create_artist_tracks_keyboard_with_back(tracks: list, page: int = 0, per_pag
     if len(nav_buttons) > 1:
         buttons.append(nav_buttons)
 
-    # Кнопка "Назад к артистам"
     buttons.append([
         InlineKeyboardButton(text="🔙 Back to Artists", callback_data="back_to_artists:0")
     ])
@@ -473,7 +413,6 @@ def create_artist_tracks_keyboard_with_back(tracks: list, page: int = 0, per_pag
 
 @router.callback_query(F.data.startswith("back_to_artists:"))
 async def handle_back_to_artists(callback: CallbackQuery):
-    """Вернуться к списку артистов"""
     page = int(callback.data.split(":")[1])
 
     try:
@@ -495,14 +434,12 @@ async def handle_back_to_artists(callback: CallbackQuery):
         await callback.answer("❌ Error", show_alert=True)
 
 def create_artist_tracks_keyboard(tracks: list, page: int = 0, per_page: int = 10) -> InlineKeyboardMarkup:
-    """Создать клавиатуру с треками артиста (без альбомов)"""
     total_pages = (len(tracks) - 1) // per_page + 1
     start_idx = page * per_page
     end_idx = start_idx + per_page
 
     buttons = []
 
-    # Кнопки треков
     for i, track in enumerate(tracks[start_idx:end_idx], start_idx + 1):
         buttons.append([
             InlineKeyboardButton(
@@ -511,7 +448,6 @@ def create_artist_tracks_keyboard(tracks: list, page: int = 0, per_page: int = 1
             )
         ])
 
-    # Навигация
     nav_buttons = []
     if page > 0:
         nav_buttons.append(
@@ -532,11 +468,7 @@ def create_artist_tracks_keyboard(tracks: list, page: int = 0, per_page: int = 1
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-
-# ========== ОТОБРАЖЕНИЕ РЕЗУЛЬТАТОВ ==========
-
 async def show_track_list(message: types.Message, tracks: list, query: str):
-    """Показать список треков с кнопками"""
     text = f"🎵 <b>Found {len(tracks)} tracks:</b>\n\n"
     text += "Select a track to play:"
 
@@ -545,7 +477,6 @@ async def show_track_list(message: types.Message, tracks: list, query: str):
 
 
 async def show_albums(message: types.Message, artist: str, albums: list, page: int = 0):
-    """Показать список альбомов артиста"""
     text = f"🎤 <b>{html.quote(artist)}</b>\n\n"
     text += f"💿 <b>Found {len(albums)} albums:</b>\n"
     text += "Select an album to view tracks:"
@@ -555,7 +486,6 @@ async def show_albums(message: types.Message, artist: str, albums: list, page: i
 
 
 async def show_artist_tracks_no_albums(message: types.Message, artist: str, tracks: list, page: int = 0):
-    """Показать все треки артиста (когда альбомов нет)"""
     text = f"🎤 <b>{html.quote(artist)}</b>\n\n"
     text += f"🎵 <b>Found {len(tracks)} tracks:</b>\n"
     text += "Select a track to play:"
@@ -563,12 +493,8 @@ async def show_artist_tracks_no_albums(message: types.Message, artist: str, trac
     keyboard = create_artist_tracks_keyboard(tracks, page)
     await message.answer(text, reply_markup=keyboard)
 
-
-# ========== ОБРАБОТЧИКИ CALLBACK ==========
-
 @router.callback_query(F.data.startswith("track:"))
 async def handle_track_selection(callback: CallbackQuery):
-    """Обработка выбора трека"""
     track_id = int(callback.data.split(":")[1])
 
     try:
@@ -589,7 +515,6 @@ async def handle_track_selection(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("albums:"))
 async def handle_albums_pagination(callback: CallbackQuery):
-    """Обработка пагинации альбомов"""
     parts = callback.data.split(":")
     artist = parts[1]
     page = int(parts[2])
@@ -617,7 +542,6 @@ async def handle_albums_pagination(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("album_tracks:"))
 async def handle_album_tracks(callback: CallbackQuery):
-    """Показать треки альбома"""
     parts = callback.data.split(":", 3)
     artist = parts[1]
     album = parts[2]
@@ -647,7 +571,6 @@ async def handle_album_tracks(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("back_to_albums:"))
 async def handle_back_to_albums(callback: CallbackQuery):
-    """Вернуться к списку альбомов"""
     parts = callback.data.split(":")
     artist = parts[1]
     page = int(parts[2])
@@ -673,14 +596,10 @@ async def handle_back_to_albums(callback: CallbackQuery):
 
 @router.callback_query(F.data == "noop")
 async def handle_noop(callback: CallbackQuery):
-    """Заглушка для неактивных кнопок"""
     await callback.answer()
 
 
-# ========== ОТПРАВКА ТРЕКОВ ==========
-
 async def send_track(message: types.Message, track):
-    """Отправить трек пользователю"""
     try:
         caption = f"🎵 <b>{html.quote(track.title)}</b>\n"
         caption += f"👤 <b>Artist:</b> {html.quote(track.artist)}\n"
@@ -714,7 +633,6 @@ async def send_track(message: types.Message, track):
 
 
 async def send_track_callback(callback: CallbackQuery, track):
-    """Отправить трек через callback"""
     try:
         caption = f"🎵 <b>{html.quote(track.title)}</b>\n"
         caption += f"👤 <b>Artist:</b> {html.quote(track.artist)}\n"
