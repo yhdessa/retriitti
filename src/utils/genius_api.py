@@ -7,10 +7,7 @@ logger = get_logger(__name__)
 
 
 class GeniusClient:
-    """Клиент для работы с Genius API"""
-
     BASE_URL = "https://api.genius.com"
-
     def __init__(self, api_token: Optional[str] = None):
         self.api_token = api_token or os.getenv("GENIUS_API_TOKEN")
 
@@ -29,11 +26,9 @@ class GeniusClient:
         logger.info("Genius API client initialized successfully")
 
     def is_available(self) -> bool:
-        """Проверка доступности Genius API"""
         return self.available
 
     def search(self, query: str) -> Optional[List[Dict[str, Any]]]:
-        """Поиск по Genius"""
         try:
             url = f"{self.BASE_URL}/search"
             params = {"q": query}
@@ -62,16 +57,6 @@ class GeniusClient:
             return None
 
     def get_artist(self, artist_id: int, text_format: str = "plain") -> Optional[Dict[str, Any]]:
-        """
-        Получить информацию об артисте по ID
-
-        Args:
-            artist_id: ID артиста в Genius
-            text_format: Формат текста ('plain', 'html', 'dom')
-
-        Returns:
-            Информация об артисте или None
-        """
         try:
             url = f"{self.BASE_URL}/artists/{artist_id}"
             params = {"text_format": text_format}
@@ -109,7 +94,6 @@ class GeniusClient:
         sort: str = "popularity",
         per_page: int = 5
     ) -> Optional[List[Dict[str, Any]]]:
-        """Получить песни артиста"""
         try:
             url = f"{self.BASE_URL}/artists/{artist_id}/songs"
             params = {
@@ -141,39 +125,25 @@ class GeniusClient:
             return None
 
     def _extract_description(self, description_data: Any) -> Optional[str]:
-        """Извлечь текст описания из разных форматов"""
         if not description_data:
             return None
 
-        # Если это словарь с ключом 'plain'
         if isinstance(description_data, dict):
             return description_data.get('plain') or description_data.get('html')
 
-        # Если это строка
         if isinstance(description_data, str):
             return description_data
 
         return None
 
     def search_artist(self, artist_name: str) -> Optional[Dict[str, Any]]:
-        """
-        Поиск артиста по имени с полной информацией
-
-        Args:
-            artist_name: Имя артиста
-
-        Returns:
-            Полные данные артиста с биографией и песнями
-        """
         try:
-            # Шаг 1: Поиск по имени
             hits = self.search(artist_name)
 
             if not hits:
                 logger.warning(f"Artist not found: {artist_name}")
                 return None
 
-            # Шаг 2: Берём первого артиста из результатов
             first_hit = hits[0].get("result", {})
             primary_artist = first_hit.get("primary_artist", {})
 
@@ -190,24 +160,19 @@ class GeniusClient:
 
             logger.info(f"Found artist: {artist_name_found} (ID: {artist_id})")
 
-            # Шаг 3: Получаем полную информацию об артисте (с plain text описанием)
             artist_full = self.get_artist(artist_id, text_format="plain")
 
             if not artist_full:
-                # Если не получилось — используем данные из поиска
                 artist_full = primary_artist
 
-            # Шаг 4: Получаем популярные песни
             songs = self.get_artist_songs(
                 artist_id,
                 sort="popularity",
                 per_page=5
             )
 
-            # Шаг 5: Извлекаем описание
             description = self._extract_description(artist_full.get("description"))
 
-            # Шаг 6: Формируем результат
             result = {
                 "name": artist_full.get("name"),
                 "id": artist_full.get("id"),
@@ -219,11 +184,10 @@ class GeniusClient:
                 "instagram": artist_full.get("instagram_name"),
                 "twitter": artist_full.get("twitter_name"),
                 "followers_count": artist_full.get("followers_count"),
-                "iq": artist_full.get("iq"),  # IQ на Genius (репутация)
+                "iq": artist_full.get("iq"),
                 "songs": []
             }
 
-            # Добавляем песни
             if songs:
                 for song in songs:
                     result["songs"].append({
@@ -244,12 +208,10 @@ class GeniusClient:
             return None
 
 
-# Singleton instance
 _genius_client: Optional[GeniusClient] = None
 
 
 def get_genius_client() -> GeniusClient:
-    """Получить экземпляр Genius клиента (Singleton)"""
     global _genius_client
 
     if _genius_client is None:
