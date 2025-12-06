@@ -4,8 +4,7 @@ bot:
   language: "en"
   version: "1.0.0"
   admins:
-    - 7971307520
-
+    - 
 messages:
   start: |
     Hello, <b>{user}</b>! 👋

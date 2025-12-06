@@ -5,19 +5,11 @@ from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types, Router, html
 from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import CommandStart, Command
-
-# Импорты из utils
 from utils.logger import setup_logger, get_logger
 from utils.genius_api import get_genius_client
 from utils.config import setup_config, get_config
-
-# Импорты handlers
 from handlers import upload, search
-
-# Импорты из db
 from db import init_db, close_db
-
-# ========== ЗАГРУЗКА КОНФИГУРАЦИИ ==========
 
 BASE_DIR = Path(__file__).parent
 env_path = BASE_DIR / ".env"
@@ -28,11 +20,8 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN is not set in .env file")
 
-# Инициализируем конфиг
 config_path = BASE_DIR / "config.yaml"
 config = setup_config(config_path)
-
-# ========== НАСТРОЙКА ЛОГИРОВАНИЯ ==========
 
 logger = setup_logger(
     name="music_bot",
@@ -53,7 +42,6 @@ logger.info(f"🔐 Environment file: {env_path}")
 logger.info(f"🔑 Bot token loaded: {BOT_TOKEN[:10]}...")
 logger.info("=" * 60)
 
-# ========== ИНИЦИАЛИЗАЦИЯ БОТА ==========
 
 bot = Bot(
     token=BOT_TOKEN,
@@ -62,23 +50,16 @@ bot = Bot(
 dp = Dispatcher()
 router = Router()
 
-# Подключаем роутеры из handlers
-dp.include_router(upload.router)  # Загрузка треков
-dp.include_router(search.router)  # Поиск треков
-dp.include_router(router)  # Основные команды
-
-# ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
+dp.include_router(upload.router)
+dp.include_router(search.router)
+dp.include_router(router)
 
 def is_admin(user_id: int) -> bool:
-    """Проверка, является ли пользователь администратором"""
     admins = config.get('bot.admins', [])
     return user_id in admins
 
-# ========== ОБРАБОТЧИКИ ==========
-
 @router.message(CommandStart())
 async def start_handler(message: types.Message):
-    """Обработчик команды /start"""
     logger.info(f"User {message.from_user.id} ({message.from_user.full_name}) started bot")
     text = config.get_message('start', user=html.bold(message.from_user.full_name))
     await message.answer(text)
@@ -99,7 +80,6 @@ async def help_handler(message: types.Message):
 
 @router.message(Command("about"))
 async def about_handler(message: types.Message):
-    """Обработчик команды /about"""
     logger.info(f"User {message.from_user.id} requested about")
     text = config.get_message('about', version=config.bot_version)
     await message.answer(text)
@@ -107,8 +87,6 @@ async def about_handler(message: types.Message):
 
 @router.message(Command("artist"))
 async def artist_handler(message: types.Message):
-    """Обработчик команды /artist <имя артиста>"""
-
     if not config.genius_enabled:
         await message.answer("⚠️ This feature is currently disabled.")
         return
@@ -143,8 +121,6 @@ async def artist_handler(message: types.Message):
             await status_msg.edit_text(text)
             logger.warning(f"Artist not found: {artist_name}")
             return
-
-        # Формируем сообщение
         text = f"🎤 <b>{html.quote(artist_data['name'])}</b>\n"
 
         if config.get('genius.include_alternate_names', True) and artist_data.get('alternate_names'):
@@ -237,16 +213,13 @@ async def artist_handler(message: types.Message):
 
 @router.message(lambda msg: msg.text and msg.text.startswith("/") and " " not in msg.text)
 async def unknown_command(message: types.Message):
-    """Обработчик неизвестных команд"""
     logger.warning(f"User {message.from_user.id} sent unknown command: {message.text}")
     text = config.get_message('unknown_command')
     await message.answer(text)
 
 
-# ========== ЗАПУСК БОТА ==========
 
 async def on_startup():
-    """Действия при запуске бота"""
     logger.info("🔧 Initializing database...")
     try:
         await init_db()
@@ -257,7 +230,6 @@ async def on_startup():
 
 
 async def on_shutdown():
-    """Действия при остановке бота"""
     logger.info("🔧 Closing database connection...")
     try:
         await close_db()
@@ -267,20 +239,14 @@ async def on_shutdown():
 
 
 async def main():
-    """Основная функция запуска бота"""
     logger.info("=" * 60)
     logger.info("🚀 Starting bot polling...")
     logger.info("=" * 60)
 
     try:
-        # Инициализация при запуске
         await on_startup()
-
-        # Удаляем webhook
         await bot.delete_webhook(drop_pending_updates=True)
         logger.info("✅ Webhook deleted")
-
-        # Запускаем polling
         await dp.start_polling(bot)
 
     except Exception as e:
@@ -288,7 +254,6 @@ async def main():
         raise
 
     finally:
-        # Очистка при остановке
         await on_shutdown()
         await bot.session.close()
         logger.info("==👋 Bot stopped==")
