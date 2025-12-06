@@ -1,5 +1,3 @@
-# src/db/crud.py
-
 from typing import List, Optional
 from sqlalchemy import select, func, distinct
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,27 +17,11 @@ async def add_track(
     duration: Optional[int] = None,
     tags: Optional[str] = None
 ) -> Track:
-    """
-    Добавить трек в базу данных
-
-    Args:
-        session: Сессия БД
-        title: Название трека
-        artist: Исполнитель
-        file_id: Telegram file_id
-        album: Альбом
-        genre: Жанр
-        duration: Длительность в секундах
-        tags: Теги через запятую
-
-    Returns:
-        Track: Созданный трек
-    """
     track = Track(
         title=title,
         artist=artist,
         album=album,
-        file_id=file_id,
+        telegram_file_id=file_id,
         genre=genre,
         duration=duration,
         tags=tags
@@ -52,22 +34,20 @@ async def add_track(
     return track
 
 
+async def get_track_by_file_id(
+    session: AsyncSession,
+    file_id: str
+) -> Optional[Track]:
+    stmt = select(Track).where(Track.telegram_file_id == file_id)
+    result = await session.execute(stmt)
+    return result.scalar_one_or_none()
+
+
 async def search_tracks(
     session: AsyncSession,
     query: str,
     limit: int = 5
 ) -> List[Track]:
-    """
-    Поиск треков по названию или исполнителю
-
-    Args:
-        session: Сессия БД
-        query: Поисковый запрос
-        limit: Максимальное количество результатов
-
-    Returns:
-        List[Track]: Список найденных треков
-    """
     search_pattern = f"%{query.lower()}%"
 
     stmt = select(Track).where(
@@ -83,47 +63,10 @@ async def search_tracks(
     return list(tracks)
 
 
-async def get_track_by_id(
-    session: AsyncSession,
-    track_id: int
-) -> Optional[Track]:
-    """Получить трек по ID"""
-    stmt = select(Track).where(Track.track_id == track_id)
-    result = await session.execute(stmt)
-    track = result.scalar_one_or_none()
-
-    if track:
-        logger.info(f"Track found: {track_id} - {track.title}")
-    else:
-        logger.warning(f"Track not found: {track_id}")
-
-    return track
-
-
-async def get_track_by_file_id(
-    session: AsyncSession,
-    file_id: str
-) -> Optional[Track]:
-    """Получить трек по file_id"""
-    stmt = select(Track).where(Track.file_id == file_id)
-    result = await session.execute(stmt)
-    return result.scalar_one_or_none()
-
-
 async def get_albums_by_artist(
     session: AsyncSession,
     artist: str
 ) -> List[str]:
-    """
-    Получить список альбомов артиста
-
-    Args:
-        session: Сессия БД
-        artist: Имя артиста
-
-    Returns:
-        List[str]: Список названий альбомов
-    """
     stmt = select(distinct(Track.album)).where(
         func.lower(Track.artist).like(f"%{artist.lower()}%"),
         Track.album.isnot(None)
@@ -141,17 +84,6 @@ async def get_tracks_by_album(
     artist: str,
     album: str
 ) -> List[Track]:
-    """
-    Получить треки из альбома
-
-    Args:
-        session: Сессия БД
-        artist: Имя артиста
-        album: Название альбома
-
-    Returns:
-        List[Track]: Список треков
-    """
     stmt = select(Track).where(
         func.lower(Track.artist).like(f"%{artist.lower()}%"),
         Track.album == album
@@ -165,15 +97,6 @@ async def get_tracks_by_album(
 
 
 async def get_all_artists(session: AsyncSession) -> List[str]:
-    """
-    Получить список всех артистов из БД
-
-    Args:
-        session: Сессия БД
-
-    Returns:
-        List[str]: Список уникальных артистов, отсортированный по алфавиту
-    """
     stmt = select(distinct(Track.artist)).order_by(Track.artist)
     result = await session.execute(stmt)
     artists = result.scalars().all()
@@ -183,7 +106,6 @@ async def get_all_artists(session: AsyncSession) -> List[str]:
 
 
 async def get_stats(session: AsyncSession) -> dict:
-    """Получить статистику по базе данных"""
     total_tracks_stmt = select(func.count(Track.track_id))
     total_tracks = await session.scalar(total_tracks_stmt)
 

@@ -1,5 +1,3 @@
-# src/db/session.py
-
 import os
 from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
@@ -20,7 +18,6 @@ engine = create_async_engine(
     max_overflow=10
 )
 
-# Фабрика сессий
 async_session_maker = async_sessionmaker(
     engine,
     class_=AsyncSession,
@@ -29,12 +26,6 @@ async_session_maker = async_sessionmaker(
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    """
-    Генератор сессий для работы с БД
-
-    Yields:
-        AsyncSession: Сессия БД
-    """
     async with async_session_maker() as session:
         try:
             yield session
@@ -48,7 +39,6 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db():
-    """Инициализация базы данных (создание таблиц)"""
     from db.models import Base
 
     try:
@@ -62,6 +52,5 @@ async def init_db():
 
 
 async def close_db():
-    """Закрытие соединения с БД"""
     await engine.dispose()
     logger.info("Database connection closed")
