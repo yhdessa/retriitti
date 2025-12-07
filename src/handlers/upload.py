@@ -9,6 +9,7 @@ from db import get_session, add_track
 logger = get_logger(__name__)
 router = Router()
 
+
 class UploadStates(StatesGroup):
     waiting_for_audio = State()
 
@@ -60,14 +61,17 @@ async def handle_audio_upload(message: types.Message, state: FSMContext):
     artist = audio.performer or "Unknown Artist"
     duration = audio.duration
     file_id = audio.file_id
-
     album = getattr(audio, 'album', None)
     genre = None
 
-    logger.info(f"Received audio: {title} by {artist} (album: {album}, file_id: {file_id[:20]}...)")
+    logger.info(f"Received audio: title='{title}', artist='{artist}', album='{album}', file_id='{file_id[:20]}...'")
 
     try:
+        logger.info("Starting database transaction...")
+
         async for session in get_session():
+            logger.info("Session obtained, calling add_track()...")
+
             track = await add_track(
                 session=session,
                 title=title,
@@ -78,25 +82,37 @@ async def handle_audio_upload(message: types.Message, state: FSMContext):
                 duration=duration
             )
 
+            logger.info(f"Track created with ID: {track.track_id}")
+
             duration_str = track.duration_formatted()
 
-            response_text = f"✅ <b>Track added to database!</b>\n\n"
+            response_text = "✅ <b>Track added to database!</b>\n\n"
             response_text += f"🎵 <b>Title:</b> {html.quote(title)}\n"
             response_text += f"👤 <b>Artist:</b> {html.quote(artist)}\n"
+
             if album:
                 response_text += f"💿 <b>Album:</b> {html.quote(album)}\n"
+
             if genre:
-                response_text += f"🎼 <b>Genre:</b> {genre}\n"
+                response_text += f"🎼 <b>Genre:</b> {html.quote(genre)}\n"
+
             response_text += f"⏱ <b>Duration:</b> {duration_str}\n"
-            response_text += f"🆔 <b>Track ID:</b> {track.track_id}"
+            response_text += f"🆔 <b>Track ID:</b> {track.track_id}\n\n"
+            response_text += "You can continue sending more audio files or send /cancel to exit."
 
             await message.answer(response_text)
 
             logger.info(f"Track {track.track_id} saved successfully")
 
     except Exception as e:
-        logger.error(f"Error saving track: {e}", exc_info=True)
-        await message.answer(config.get_message('upload.error'))
+        logger.error(f"❌ Error saving track: {type(e).__name__}: {str(e)}", exc_info=True)
+
+        error_msg = "❌ Error while saving track to database.\n\n"
+        error_msg += f"<b>Debug info:</b>\n"
+        error_msg += f"Error type: {type(e).__name__}\n"
+        error_msg += f"Error: {html.quote(str(e))}"
+
+        await message.answer(error_msg)
 
 
 @router.message(UploadStates.waiting_for_audio)

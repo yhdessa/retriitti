@@ -1,3 +1,5 @@
+# src/utils/genius_api.py
+
 import os
 import requests
 from typing import Optional, Dict, Any, List
@@ -7,7 +9,9 @@ logger = get_logger(__name__)
 
 
 class GeniusClient:
+
     BASE_URL = "https://api.genius.com"
+
     def __init__(self, api_token: Optional[str] = None):
         self.api_token = api_token or os.getenv("GENIUS_API_TOKEN")
 
@@ -18,8 +22,7 @@ class GeniusClient:
 
         self.headers = {
             "Authorization": f"Bearer {self.api_token}",
-            "User-Agent": "MusicFinderBot/1.0",
-            "Accept": "application/json"
+            "User-Agent": "MusicFinderBot/1.0"
         }
         self.available = True
 
@@ -56,19 +59,13 @@ class GeniusClient:
             logger.error(f"Unexpected error in search: {e}", exc_info=True)
             return None
 
-    def get_artist(self, artist_id: int, text_format: str = "plain") -> Optional[Dict[str, Any]]:
+    def get_artist(self, artist_id: int) -> Optional[Dict[str, Any]]:
         try:
             url = f"{self.BASE_URL}/artists/{artist_id}"
-            params = {"text_format": text_format}
 
             logger.info(f"Fetching artist info for ID: {artist_id}")
 
-            response = requests.get(
-                url,
-                headers=self.headers,
-                params=params,
-                timeout=10
-            )
+            response = requests.get(url, headers=self.headers, timeout=10)
             response.raise_for_status()
 
             data = response.json()
@@ -94,6 +91,17 @@ class GeniusClient:
         sort: str = "popularity",
         per_page: int = 5
     ) -> Optional[List[Dict[str, Any]]]:
+        """
+        Получить песни артиста
+
+        Args:
+            artist_id: ID артиста
+            sort: Сортировка ('title' или 'popularity')
+            per_page: Количество песен
+
+        Returns:
+            Список песен или None
+        """
         try:
             url = f"{self.BASE_URL}/artists/{artist_id}/songs"
             params = {
@@ -124,22 +132,10 @@ class GeniusClient:
             logger.error(f"Unexpected error in get_artist_songs: {e}", exc_info=True)
             return None
 
-    def _extract_description(self, description_data: Any) -> Optional[str]:
-        if not description_data:
-            return None
-
-        if isinstance(description_data, dict):
-            return description_data.get('plain') or description_data.get('html')
-
-        if isinstance(description_data, str):
-            return description_data
-
-        return None
-
     def search_artist(self, artist_name: str) -> Optional[Dict[str, Any]]:
         try:
             hits = self.search(artist_name)
-
+            
             if not hits:
                 logger.warning(f"Artist not found: {artist_name}")
                 return None
@@ -160,7 +156,7 @@ class GeniusClient:
 
             logger.info(f"Found artist: {artist_name_found} (ID: {artist_id})")
 
-            artist_full = self.get_artist(artist_id, text_format="plain")
+            artist_full = self.get_artist(artist_id)
 
             if not artist_full:
                 artist_full = primary_artist
@@ -171,20 +167,18 @@ class GeniusClient:
                 per_page=5
             )
 
-            description = self._extract_description(artist_full.get("description"))
-
             result = {
                 "name": artist_full.get("name"),
                 "id": artist_full.get("id"),
                 "url": artist_full.get("url"),
                 "image_url": artist_full.get("image_url") or artist_full.get("header_image_url"),
-                "description": description,
-                "alternate_names": artist_full.get("alternate_names", []),
+                "description": self._extract_description(artist_full.get("description")),
                 "facebook": artist_full.get("facebook_name"),
                 "instagram": artist_full.get("instagram_name"),
                 "twitter": artist_full.get("twitter_name"),
                 "followers_count": artist_full.get("followers_count"),
                 "iq": artist_full.get("iq"),
+                "alternate_names": artist_full.get("alternate_names", []),
                 "songs": []
             }
 
@@ -200,12 +194,24 @@ class GeniusClient:
 
             result["song_count"] = len(result["songs"])
 
-            logger.info(f"Successfully fetched full artist data for: {result['name']}")
+            logger.info(f"Successfully fetched artist data for: {result['name']}")
             return result
 
         except Exception as e:
             logger.error(f"Error in search_artist for '{artist_name}': {e}", exc_info=True)
             return None
+
+    def _extract_description(self, description_data: Any) -> Optional[str]:
+        if not description_data:
+            return None
+
+        if isinstance(description_data, dict):
+            return description_data.get('plain') or description_data.get('html')
+
+        if isinstance(description_data, str):
+            return description_data
+
+        return None
 
 
 _genius_client: Optional[GeniusClient] = None

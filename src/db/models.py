@@ -4,7 +4,6 @@ from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
 
-
 class Track(Base):
     __tablename__ = 'tracks'
 
@@ -13,8 +12,7 @@ class Track(Base):
     artist = Column(Text, nullable=False, index=True)
     album = Column(Text, nullable=True, index=True)
     genre = Column(Text, nullable=True)
-    telegram_file_id = Column('telegram_file_id', Text, nullable=False, unique=True)
-
+    telegram_file_id = Column('file_id', Text, nullable=False, unique=True)  # ← Changed here
     duration = Column(Integer, nullable=True)
     tags = Column(Text, nullable=True)
     uploaded_at = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -46,7 +44,6 @@ class Track(Base):
     def duration_formatted(self) -> str:
         if not self.duration:
             return "Unknown"
-
         minutes = self.duration // 60
         seconds = self.duration % 60
         return f"{minutes}:{seconds:02d}"

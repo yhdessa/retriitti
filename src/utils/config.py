@@ -4,6 +4,7 @@ import yaml
 
 
 class Config:
+
     def __init__(self, config_path: Path):
         self.config_path = config_path
         self._data: Dict[str, Any] = {}
@@ -70,6 +71,7 @@ class Config:
     @property
     def tracks_per_page(self) -> int:
         return self.get('pagination.tracks_per_page', 8)
+
 
 _config: Optional[Config] = None
 

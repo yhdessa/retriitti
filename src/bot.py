@@ -5,11 +5,15 @@ from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types, Router, html
 from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import CommandStart, Command
+
 from utils.logger import setup_logger, get_logger
 from utils.genius_api import get_genius_client
 from utils.config import setup_config, get_config
+
 from handlers import upload, search
+
 from db import init_db, close_db
+
 
 BASE_DIR = Path(__file__).parent
 env_path = BASE_DIR / ".env"
@@ -22,6 +26,7 @@ if not BOT_TOKEN:
 
 config_path = BASE_DIR / "config.yaml"
 config = setup_config(config_path)
+
 
 logger = setup_logger(
     name="music_bot",
@@ -54,9 +59,11 @@ dp.include_router(upload.router)
 dp.include_router(search.router)
 dp.include_router(router)
 
+
 def is_admin(user_id: int) -> bool:
     admins = config.get('bot.admins', [])
     return user_id in admins
+
 
 @router.message(CommandStart())
 async def start_handler(message: types.Message):
@@ -68,13 +75,12 @@ async def start_handler(message: types.Message):
 @router.message(Command("help"))
 async def help_handler(message: types.Message):
     logger.info(f"User {message.from_user.id} requested help")
+
     text = config.get_message('help')
-    text = text.replace(
-        "/stats — show database statistics",
-        "/browse — browse all artists\n    /stats — show database statistics"
-    )
+
     if is_admin(message.from_user.id):
         text += "\n\n" + config.get_message('help_admin')
+
     await message.answer(text)
 
 
@@ -87,6 +93,7 @@ async def about_handler(message: types.Message):
 
 @router.message(Command("artist"))
 async def artist_handler(message: types.Message):
+
     if not config.genius_enabled:
         await message.answer("⚠️ This feature is currently disabled.")
         return
@@ -121,6 +128,7 @@ async def artist_handler(message: types.Message):
             await status_msg.edit_text(text)
             logger.warning(f"Artist not found: {artist_name}")
             return
+
         text = f"🎤 <b>{html.quote(artist_data['name'])}</b>\n"
 
         if config.get('genius.include_alternate_names', True) and artist_data.get('alternate_names'):
@@ -184,7 +192,6 @@ async def artist_handler(message: types.Message):
 
         text += f"🔗 <a href='{artist_data['url']}'>View full profile on Genius</a>"
 
-        # Отправка
         if len(text) > 1024:
             if artist_data.get('image_url'):
                 await message.answer_photo(photo=artist_data['image_url'])
@@ -218,7 +225,6 @@ async def unknown_command(message: types.Message):
     await message.answer(text)
 
 
-
 async def on_startup():
     logger.info("🔧 Initializing database...")
     try:
@@ -245,8 +251,10 @@ async def main():
 
     try:
         await on_startup()
+
         await bot.delete_webhook(drop_pending_updates=True)
         logger.info("✅ Webhook deleted")
+
         await dp.start_polling(bot)
 
     except Exception as e:
@@ -256,7 +264,7 @@ async def main():
     finally:
         await on_shutdown()
         await bot.session.close()
-        logger.info("==👋 Bot stopped==")
+        logger.info("👋 Bot stopped")
 
 
 if __name__ == "__main__":

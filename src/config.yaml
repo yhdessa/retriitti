@@ -4,7 +4,7 @@ bot:
   language: "en"
   version: "1.0.0"
   admins:
-    - 
+    -
 messages:
   start: |
     Hello, <b>{user}</b>! 👋

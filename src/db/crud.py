@@ -6,7 +6,6 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-
 async def add_track(
     session: AsyncSession,
     title: str,
@@ -17,6 +16,7 @@ async def add_track(
     duration: Optional[int] = None,
     tags: Optional[str] = None
 ) -> Track:
+
     track = Track(
         title=title,
         artist=artist,
@@ -32,15 +32,6 @@ async def add_track(
 
     logger.info(f"Track added: {track.track_id} - {title} by {artist}")
     return track
-
-
-async def get_track_by_file_id(
-    session: AsyncSession,
-    file_id: str
-) -> Optional[Track]:
-    stmt = select(Track).where(Track.telegram_file_id == file_id)
-    result = await session.execute(stmt)
-    return result.scalar_one_or_none()
 
 
 async def search_tracks(
@@ -61,6 +52,31 @@ async def search_tracks(
 
     logger.info(f"Search '{query}' found {len(tracks)} tracks")
     return list(tracks)
+
+
+async def get_track_by_id(
+    session: AsyncSession,
+    track_id: int
+) -> Optional[Track]:
+    stmt = select(Track).where(Track.track_id == track_id)
+    result = await session.execute(stmt)
+    track = result.scalar_one_or_none()
+
+    if track:
+        logger.info(f"Track found: {track_id} - {track.title}")
+    else:
+        logger.warning(f"Track not found: {track_id}")
+
+    return track
+
+
+async def get_track_by_file_id(
+    session: AsyncSession,
+    file_id: str
+) -> Optional[Track]:
+    stmt = select(Track).where(Track.telegram_file_id == file_id)
+    result = await session.execute(stmt)
+    return result.scalar_one_or_none()
 
 
 async def get_albums_by_artist(
