@@ -1,6 +1,7 @@
 from aiogram import Router, types, F, html
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+import asyncio
 from utils.config import get_config
 from utils.logger import get_logger
 from db import (
@@ -184,6 +185,19 @@ def create_albums_keyboard(artist: str, albums: list, page: int = 0) -> InlineKe
     if len(nav_buttons) > 1:
         buttons.append(nav_buttons)
 
+    action_buttons = []
+    artist_truncated = artist[:25]
+
+    action_buttons.append(
+        InlineKeyboardButton(text="📥 Download All", callback_data=f"dl_all:{artist_truncated}")
+    )
+
+    action_buttons.append(
+        InlineKeyboardButton(text="🏠 Artists", callback_data="back_to_artists:0")
+    )
+
+    buttons.append(action_buttons)
+
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -226,9 +240,21 @@ def create_album_tracks_keyboard(artist: str, album: str, tracks: list, page: in
     if len(nav_buttons) > 1:
         buttons.append(nav_buttons)
 
-    buttons.append([
-        InlineKeyboardButton(text="🔙 Back to albums", callback_data=f"back_alb:{artist_truncated}:0")
-    ])
+    action_buttons = []
+
+    action_buttons.append(
+        InlineKeyboardButton(text="📥 Album", callback_data=f"dl_album:{artist_truncated}:{album_truncated}")
+    )
+
+    action_buttons.append(
+        InlineKeyboardButton(text="🔙 Albums", callback_data=f"back_alb:{artist_truncated}:0")
+    )
+
+    action_buttons.append(
+        InlineKeyboardButton(text="🏠 Artists", callback_data="back_to_artists:0")
+    )
+
+    buttons.append(action_buttons)
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -265,6 +291,11 @@ def create_artist_tracks_keyboard(tracks: list, page: int = 0, per_page: int = 1
 
     if len(nav_buttons) > 1:
         buttons.append(nav_buttons)
+
+    # Action buttons
+    buttons.append([
+        InlineKeyboardButton(text="🏠 Artists", callback_data="back_to_artists:0")
+    ])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -317,7 +348,6 @@ async def show_albums(message: types.Message, artist: str, albums: list, page: i
 
 
 async def show_artist_tracks_no_albums(message: types.Message, artist: str, tracks: list):
-    """Show tracks for an artist without albums"""
     text = f"🎤 <b>Artist:</b> {html.quote(artist)}\n\n"
     text += f"🎵 <b>Tracks found:</b> {len(tracks)}\n\n"
     text += "Select a track:"
@@ -345,6 +375,7 @@ async def show_artists_list(message: types.Message, artists: list, page: int = 0
 
     keyboard = create_artists_keyboard(artists, page, per_page=10)
     await message.answer(text, reply_markup=keyboard)
+
 
 async def send_track(message: types.Message, track):
     try:
@@ -407,6 +438,7 @@ async def send_track_callback(callback: CallbackQuery, track):
     except Exception as e:
         logger.error(f"Error sending track {track.track_id}: {e}", exc_info=True)
         await callback.answer("❌ Error sending track", show_alert=True)
+
 
 _callback_cache = {}
 
@@ -616,3 +648,164 @@ async def handle_artists_pagination(callback: CallbackQuery):
 @router.callback_query(F.data == "noop")
 async def handle_noop(callback: CallbackQuery):
     await callback.answer()
+
+
+@router.callback_query(F.data.startswith("dl_all:"))
+async def handle_download_all_artist(callback: CallbackQuery):
+    artist = callback.data.split(":", 1)[1]
+    artist_full = get_cached_data(artist)
+
+    try:
+        await callback.answer("📥 Sending all tracks...", show_alert=False)
+
+        async for session in get_session():
+            tracks = await search_tracks(session, artist_full, limit=100)
+            artist_tracks = [t for t in tracks if artist_full.lower() in t.artist.lower()]
+
+            if not artist_tracks:
+                await callback.answer("❌ No tracks found", show_alert=True)
+                return
+
+            status_msg = await callback.message.answer(
+                f"📥 <b>Sending {len(artist_tracks)} track(s) by {html.quote(artist_full)}</b>\n\n"
+                f"⏳ Please wait..."
+            )
+
+            sent_count = 0
+            failed_count = 0
+
+            for i, track in enumerate(artist_tracks, 1):
+                try:
+                    caption = f"🎵 <b>{html.quote(track.title)}</b>\n"
+                    caption += f"👤 {html.quote(track.artist)}\n"
+
+                    if track.album:
+                        caption += f"💿 {html.quote(track.album)}\n"
+
+                    if track.duration:
+                        caption += f"⏱ {track.duration_formatted()}"
+
+                    await callback.message.answer_audio(
+                        audio=track.file_id,
+                        caption=caption,
+                        title=track.title,
+                        performer=track.artist,
+                        duration=track.duration
+                    )
+
+                    sent_count += 1
+
+                    if i % 5 == 0:
+                        try:
+                            await status_msg.edit_text(
+                                f"📥 <b>Sending tracks...</b>\n\n"
+                                f"Progress: {i}/{len(artist_tracks)}\n"
+                                f"✅ Sent: {sent_count}\n"
+                                f"❌ Failed: {failed_count}"
+                            )
+                        except:
+                            pass
+
+                    if i % 3 == 0:
+                        await asyncio.sleep(1)
+
+                except Exception as e:
+                    logger.error(f"Error sending track {track.track_id}: {e}")
+                    failed_count += 1
+
+            await status_msg.edit_text(
+                f"✅ <b>Download complete!</b>\n\n"
+                f"👤 Artist: {html.quote(artist_full)}\n"
+                f"📊 Total: {len(artist_tracks)}\n"
+                f"✅ Sent: {sent_count}\n"
+                + (f"❌ Failed: {failed_count}\n" if failed_count > 0 else "")
+            )
+
+            logger.info(f"Sent {sent_count}/{len(artist_tracks)} tracks for artist: {artist_full}")
+
+    except Exception as e:
+        logger.error(f"Error downloading all tracks: {e}", exc_info=True)
+        await callback.answer("❌ Error sending tracks", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("dl_album:"))
+async def handle_download_album(callback: CallbackQuery):
+    parts = callback.data.split(":", 2)
+    artist = parts[1]
+    album = parts[2]
+
+    artist_full = get_cached_data(artist)
+    album_full = get_cached_data(album)
+
+    try:
+        await callback.answer("📥 Sending album...", show_alert=False)
+
+        async for session in get_session():
+            tracks = await get_tracks_by_album(session, artist_full, album_full)
+
+            if not tracks:
+                await callback.answer("❌ No tracks found", show_alert=True)
+                return
+
+            status_msg = await callback.message.answer(
+                f"📥 <b>Sending album</b>\n\n"
+                f"💿 {html.quote(album_full)}\n"
+                f"👤 {html.quote(artist_full)}\n"
+                f"🎵 {len(tracks)} track(s)\n\n"
+                f"⏳ Please wait..."
+            )
+
+            sent_count = 0
+            failed_count = 0
+
+            for i, track in enumerate(tracks, 1):
+                try:
+                    caption = f"🎵 <b>{html.quote(track.title)}</b>\n"
+                    caption += f"👤 {html.quote(track.artist)}\n"
+                    caption += f"💿 {html.quote(track.album)}\n"
+
+                    if track.duration:
+                        caption += f"⏱ {track.duration_formatted()}"
+
+                    await callback.message.answer_audio(
+                        audio=track.file_id,
+                        caption=caption,
+                        title=track.title,
+                        performer=track.artist,
+                        duration=track.duration
+                    )
+
+                    sent_count += 1
+
+                    if i % 3 == 0:
+                        try:
+                            await status_msg.edit_text(
+                                f"📥 <b>Sending album...</b>\n\n"
+                                f"Progress: {i}/{len(tracks)}\n"
+                                f"✅ Sent: {sent_count}\n"
+                                f"❌ Failed: {failed_count}"
+                            )
+                        except:
+                            pass
+
+                    if i % 2 == 0:
+                        await asyncio.sleep(0.5)
+
+                except Exception as e:
+                    logger.error(f"Error sending track {track.track_id}: {e}")
+                    failed_count += 1
+
+            await status_msg.edit_text(
+                f"✅ <b>Album sent successfully!</b>\n\n"
+                f"💿 {html.quote(album_full)}\n"
+                f"👤 {html.quote(artist_full)}\n\n"
+                f"📊 Total: {len(tracks)}\n"
+                f"✅ Sent: {sent_count}\n"
+                + (f"❌ Failed: {failed_count}\n" if failed_count > 0 else "")
+            )
+
+            logger.info(f"Sent {sent_count}/{len(tracks)} tracks from album: {album_full}")
+
+    except Exception as e:
+        logger.error(f"Error downloading album: {e}", exc_info=True)
+        await callback.answer("❌ Error sending album", show_alert=True)
