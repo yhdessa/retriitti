@@ -20,30 +20,26 @@ router = Router()
 
 @router.message(Command("upload"))
 async def upload_command(message: types.Message):
-    """Handle /upload command - show instructions"""
     config = get_config()
-    await message.answer(config.get_message('upload.instruction'))
+    text = config.get_message('upload.instruction')
+    await message.answer(text)
 
 
 @router.message(F.audio)
 async def handle_audio_upload(message: types.Message):
-    """Handle audio file upload with automatic metadata enrichment"""
     config = get_config()
     audio = message.audio
 
     try:
-        # Extract basic metadata from file
         title = audio.title or audio.file_name or "Unknown"
         artist = audio.performer or "Unknown Artist"
         duration = audio.duration
 
-        # Clean up title (remove file extension if present)
         if title.endswith(('.mp3', '.m4a', '.flac', '.wav', '.ogg')):
             title = title.rsplit('.', 1)[0]
 
         logger.info(f"User {message.from_user.id} uploading: {title} by {artist}")
 
-        # Check for duplicate
         async for session in get_session():
             existing = await get_track_by_file_id(session, audio.file_id)
             if existing:
@@ -58,28 +54,24 @@ async def handle_audio_upload(message: types.Message):
                 )
                 return
 
-        # Check if we should fetch metadata from internet
         should_fetch = (
             artist != "Unknown Artist"
             and title != "Unknown"
-            and title != audio.file_name  # Has proper metadata
-            and config.get('metadata.auto_fetch_album', True)  # Feature enabled
+            and title != audio.file_name
+            and config.get('metadata.auto_fetch_album', True)
         )
 
         album = None
 
         if should_fetch:
-            # Show searching message
             search_msg = await message.answer(
                 "🔍 <b>Searching for album information...</b>\n"
                 "⏳ This may take a few seconds..."
             )
 
             try:
-                # Fetch album from MusicBrainz (with iTunes fallback)
                 album = await fetch_album_with_fallback(artist, title)
 
-                # Delete search message
                 await search_msg.delete()
 
                 if album:
@@ -113,7 +105,6 @@ async def handle_audio_upload(message: types.Message):
             else:
                 logger.info(f"Metadata fetch disabled in config")
 
-        # Save to database
         async for session in get_session():
             try:
                 track = await add_track(
@@ -122,14 +113,14 @@ async def handle_audio_upload(message: types.Message):
                     artist=artist,
                     file_id=audio.file_id,
                     album=album,
-                    genre=None,  # Can be enhanced later
+                    genre=None,
                     duration=duration,
                     tags=None
                 )
 
                 await session.commit()
+                await session.refresh(track)
 
-                # Send success message
                 success_text = "✅ <b>Track saved successfully!</b>\n\n"
                 success_text += f"🎵 <b>Title:</b> {title}\n"
                 success_text += f"👤 <b>Artist:</b> {artist}\n"
@@ -145,23 +136,50 @@ async def handle_audio_upload(message: types.Message):
                 success_text += f"\n📊 <b>Track ID:</b> {track.track_id}"
 
                 await message.answer(success_text)
-                logger.info(f"Track saved: ID={track.track_id}, Album={album}")
+                logger.info(f"Track saved successfully: ID={track.track_id}, Title={title}, Album={album}")
 
             except IntegrityError as e:
                 await session.rollback()
-                logger.warning(f"Database integrity error: {e}")
-                await message.answer(
-                    "⚠️ <b>Could not save track</b>\n\n"
-                    "This track may already exist in the database."
-                )
+
+                error_detail = str(e.orig) if hasattr(e, 'orig') else str(e)
+                logger.error(f"IntegrityError during save: {error_detail}", exc_info=True)
+
+                if 'unique' in error_detail.lower() or 'duplicate' in error_detail.lower():
+                    try:
+                        existing_track = await get_track_by_file_id(session, audio.file_id)
+                        if existing_track:
+                            await message.answer(
+                                "⚠️ <b>Track already exists in database</b>\n\n"
+                                f"🎵 <b>Title:</b> {existing_track.title}\n"
+                                f"👤 <b>Artist:</b> {existing_track.artist}\n"
+                                + (f"💿 <b>Album:</b> {existing_track.album}\n" if existing_track.album else "") +
+                                f"\n📊 <b>Track ID:</b> {existing_track.track_id}"
+                            )
+                        else:
+                            await message.answer(
+                                "⚠️ <b>Track already exists</b>\n\n"
+                                "This file has already been uploaded to the database."
+                            )
+                    except:
+                        await message.answer(
+                            "⚠️ <b>Duplicate track detected</b>\n\n"
+                            "This file already exists in the database."
+                        )
+                else:
+                    await message.answer(
+                        "❌ <b>Database error</b>\n\n"
+                        f"Could not save track due to a constraint violation.\n\n"
+                        f"<code>{error_detail[:150]}</code>"
+                    )
 
             except Exception as e:
                 await session.rollback()
-                logger.error(f"Database error while saving track: {e}", exc_info=True)
+                logger.error(f"Unexpected error while saving track: {e}", exc_info=True)
                 await message.answer(
                     "❌ <b>Error saving track</b>\n\n"
-                    f"Track: {title} by {artist}\n"
-                    f"Please try again or contact support."
+                    f"An unexpected error occurred:\n"
+                    f"<code>{str(e)[:150]}</code>\n\n"
+                    "Please try again or contact support."
                 )
 
     except Exception as e:
@@ -174,10 +192,8 @@ async def handle_audio_upload(message: types.Message):
 
 @router.message(F.document)
 async def handle_document_audio(message: types.Message):
-    """Handle audio files sent as documents"""
     document = message.document
 
-    # Check if it's an audio file
     if document.mime_type and document.mime_type.startswith('audio/'):
         await message.answer(
             "ℹ️ <b>Audio file detected</b>\n\n"
@@ -193,7 +209,6 @@ async def handle_document_audio(message: types.Message):
 
 @router.message(Command("bulk_upload"))
 async def bulk_upload_command(message: types.Message):
-    """Handle bulk upload request"""
     await message.answer(
         "📦 <b>Bulk Upload Guide</b>\n\n"
         "To upload multiple tracks:\n"
@@ -211,9 +226,7 @@ async def bulk_upload_command(message: types.Message):
 
 @router.message(Command("enrich_all"))
 async def enrich_all_command(message: types.Message):
-    """Enrich metadata for all tracks missing album info (Admin only)"""
 
-    # Check if user is admin
     user_id = message.from_user.id
     config = get_config()
     admin_ids = config.get('admin_ids', [])
@@ -226,7 +239,6 @@ async def enrich_all_command(message: types.Message):
         logger.warning(f"Unauthorized /enrich_all attempt by user {user_id}")
         return
 
-    # Check if MusicBrainz is enabled
     if not config.get('musicbrainz.enabled', True):
         await message.answer(
             "❌ <b>MusicBrainz integration is disabled</b>\n\n"
@@ -241,7 +253,6 @@ async def enrich_all_command(message: types.Message):
 
     try:
         async for session in get_session():
-            # Count tracks without album
             total_count = await count_tracks_without_album(session)
 
             if total_count == 0:
@@ -251,7 +262,6 @@ async def enrich_all_command(message: types.Message):
                 )
                 return
 
-            # Get tracks without album (limit to 100 at a time)
             limit = min(100, total_count)
             tracks = await get_tracks_without_album(session, limit=limit)
 
@@ -271,16 +281,13 @@ async def enrich_all_command(message: types.Message):
 
             for i, track in enumerate(tracks, 1):
                 try:
-                    # Skip tracks with "Unknown Artist"
                     if track.artist.lower() in ['unknown artist', 'unknown']:
                         skipped += 1
                         continue
 
-                    # Fetch album info
                     album = await fetch_album_with_fallback(track.artist, track.title)
 
                     if album:
-                        # Update track
                         updated_track = await update_track_album(session, track.track_id, album)
                         if updated_track:
                             await session.commit()
@@ -292,7 +299,6 @@ async def enrich_all_command(message: types.Message):
                         failed += 1
                         logger.info(f"No album found for: {track.artist} - {track.title}")
 
-                    # Update progress every 5 tracks or at the end
                     if i % 5 == 0 or i == total:
                         await status_msg.edit_text(
                             f"🔄 <b>Processing tracks...</b>\n\n"
@@ -337,7 +343,6 @@ async def enrich_all_command(message: types.Message):
 
 @router.message(Command("album_stats"))
 async def album_stats_command(message: types.Message):
-    """Show statistics about album coverage"""
     try:
         async for session in get_session():
             from db.crud import get_stats
