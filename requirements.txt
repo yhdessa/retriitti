@@ -1,7 +1,10 @@
 aiogram
+aiohttp
 python-dotenv
 pyyaml
 sqlalchemy[asyncio]
 asyncpg
 alembic
 requests
+python-dateutil
+colorlog

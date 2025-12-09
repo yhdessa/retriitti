@@ -1,242 +1,172 @@
+# Bot Configuration
 bot:
-  name: "Music Finder Bot"
-  description: "Telegram bot for searching and sending music files."
-  language: "en"
+  name: "Music Bot"
   version: "1.0.0"
   admins:
     -
 
+logging:
+  level: "INFO"
+  log_to_console: true
+  log_to_file: true
+  file_path: "logs/bot.log"
+  max_file_size_mb: 10
+  backup_count: 5
+  format: "detailed"
+
+genius:
+  enabled: true
+  api_token: ${GENIUS_API_TOKEN}
+  max_description_length: 500
+  max_songs: 5
+  include_alternate_names: true
+  include_stats: true
+  include_social_links: true
+
+musicbrainz:
+  enabled: true
+  timeout: 10
+  user_agent: "TelegramMusicBot/1.0"
+  rate_limit: 1.0
+
+metadata:
+  auto_fetch_album: true
+  auto_fetch_genre: false
+  fallback_to_itunes: true
+
+search:
+  max_results: 5
+  min_query_length: 2
+
+pagination:
+  tracks_per_page: 8
+  albums_per_page: 5
+  artists_per_page: 10
+
 messages:
   start: |
-    Hello, <b>{user}</b>! 👋
-    Welcome to Music Finder Bot 🎵
+    👋 Hello, <b>{user}</b>!
 
-    Send me the name of any song or artist — and I will find it in the database.
+    Welcome to <b>Music Bot</b>!
 
-    Try searching for an artist to browse their albums!
+    <b>Available commands:</b>
+    /help - Show all commands
+    /upload - Upload a track
+    /browse - Browse artists
+    /stats - Database statistics
+    /artist - Get artist info (Genius API)
+
+    💡 Just type an artist or song name to search!
 
   help: |
-    <b>📖 How to use:</b>
+    🎵 <b>Music Bot - Commands</b>
 
-    <b>Commands:</b>
-    /start — welcome message
-    /help — this help message
-    /browse — browse all artists
-    /artist &lt;name&gt; — get artist info from Genius
-    /stats — show database statistics
-    /about — about this bot
+    <b>📤 Uploading:</b>
+    /upload - Upload instructions
+    Send audio files to add to database
 
-    <b>Search:</b>
-    Just send any song name or artist name to search in the database.
+    <b>🔍 Searching:</b>
+    Type artist or track name (no command needed)
+    Examples: <code>Queen</code>, <code>Bohemian Rhapsody</code>
 
-    <b>Browse albums:</b>
-    Search for an artist (e.g., "Radiohead") to browse their albums.
+    <b>📚 Browsing:</b>
+    /browse - Browse all artists
+    /stats - Database statistics
+    /album_stats - Album coverage info
+
+    <b>🎤 Artist Info:</b>
+    /artist [name] - Get info from Genius
+    Example: <code>/artist Queen</code>
+
+    <b>💡 Tips:</b>
+    • Send files as Audio, not documents
+    • Files with metadata get auto-enriched
+    • Bot searches MusicBrainz for albums
+
+  help_admin: |
+    <b>🔧 Admin Commands:</b>
+    /enrich_all - Auto-fetch albums for all tracks
 
   about: |
-    🎵 <b>Music Finder Bot v{version}</b>
+    🤖 <b>Music Bot</b> v{version}
 
-    This bot helps you find music and information about artists.
+    A Telegram bot for managing and sharing music.
 
-    <b>✨ Features:</b>
-    • 🔍 Search for music by title, artist, or album
-    • 💿 Browse albums and tracks with inline buttons
-    • 🎤 Get detailed artist information from Genius
-    • 📊 View database statistics
-    • 🎵 High-quality audio streaming via Telegram
+    <b>Features:</b>
+    • 🎵 Upload and organize music
+    • 🔍 Smart search by artist/title/album
+    • 📚 Browse by artist and album
+    • 💿 Automatic album detection
+    • 🎤 Artist info from Genius API
+    • 📊 Database statistics
 
-    <b>🛠 Tech Stack:</b>
-    • Python 3.11 + Aiogram 3
-    • PostgreSQL + SQLAlchemy (async)
-    • Docker + docker-compose
+    <b>Technology:</b>
+    • Python + aiogram
+    • PostgreSQL database
+    • MusicBrainz API integration
     • Genius API integration
 
-    Made with ❤️ using modern DevOps practices
+    Made with ❤️ for music lovers
 
   unknown_command: |
-    ❓ I dont know this command yet 😅
+    ❓ Unknown command.
 
-    Try /help to see all available commands.
+    Use /help to see available commands.
 
-  processing: "🔎 Searching for your track, please wait…"
+  processing: "⏳ Processing..."
 
-  not_found: |
-    😔 Sorry, I couldnt find this song.
-
-    Try a different search query or check the spelling.
-
-  error: |
-    ❌ Unexpected error occurred.
-
-    Please try again later or contact the administrator.
+  error: "❌ An error occurred. Please try again later."
 
   upload:
-    mode_enabled: |
-      📤 <b>Upload mode enabled!</b>
+    instruction: |
+      📤 <b>Upload Track</b>
 
-      Send me audio files to add them to the database.
-      I will extract metadata automatically (title, artist, album, duration).
+      Send an audio file to add it to the database.
 
-      <b>💡 Tips:</b>
-      • Make sure audio files have proper ID3 tags
-      • Supported formats: MP3, WAV, FLAC, M4A, OGG
-      • Max file size: 20 MB
+      ⚠️ <b>Important:</b>
+      • Send files as <b>Audio</b> (not Document)
+      • Files with proper metadata work best
+      • Bot will automatically search for album info
 
-      Send /cancel to exit upload mode.
+      💡 Automatic metadata enrichment from MusicBrainz
 
-    mode_disabled: "✅ Upload mode disabled."
-
-    success: |
-      ✅ <b>Track added to database!</b>
-
-      🎵 <b>Title:</b> {title}
-      👤 <b>Artist:</b> {artist}
-      💿 <b>Album:</b> {album}
-      🎼 <b>Genre:</b> {genre}
-      ⏱ <b>Duration:</b> {duration}
-      🆔 <b>Track ID:</b> {track_id}
-
-      You can continue sending more audio files or send /cancel to exit.
-
-    invalid_audio: |
-      ❌ Please send a valid audio file.
-
-      Supported formats: MP3, WAV, FLAC, M4A, OGG
-
-    not_admin: |
-      ⛔️ You dont have permission to upload tracks.
-
-      This feature is available only for administrators.
-
-    error: |
-      ❌ Error while saving track to database.
-
-      Please try again or contact the administrator.
-
-  # Сообщения для поиска
   search:
-    found_multiple: |
-      🎵 <b>Found {count} tracks:</b>
+    no_results: "🔍 No results found for: <b>{query}</b>"
+    results_header: "🔍 <b>Search results for:</b> {query}\n\nFound {count} track(s):"
 
-      Select a track to play:
-
-    found_single: |
-      🎵 Found track: <b>{title}</b> by <b>{artist}</b>
-
-    no_results: |
-      ❌ No tracks found for "<b>{query}</b>"
-
-      Try a different search query, check spelling, or browse by artist.
-
-    albums_found: |
-      🎤 <b>{artist}</b>
-
-      💿 <b>Found {count} albums:</b>
-      Select an album to view tracks:
-
-    album_tracks: |
-      💿 <b>{album}</b>
-      👤 <b>{artist}</b>
-
-      🎵 <b>{count} tracks:</b>
-      Select a track to play:
-
-  # Статистика
   stats:
     info: |
       📊 <b>Database Statistics</b>
 
       🎵 Total tracks: {total_tracks}
       👥 Unique artists: {unique_artists}
-      💿 Albums: {unique_albums}
       🎼 Genres: {genres_count}
       📅 Last upload: {last_upload}
 
-      Use search to find your favorite music! 🎶
-
-  # Сообщения для артистов (Genius API)
   artist:
     usage: |
-      ℹ️ <b>Usage:</b>
-      /artist <b>&lt;artist name&gt;</b>
+      🎤 <b>Artist Info Usage</b>
+
+      <b>Command:</b> <code>/artist [artist name]</code>
 
       <b>Examples:</b>
-      /artist The Weeknd
-      /artist My Bloody Valentine
-      /artist Radiohead
+      /artist Queen
+      /artist The Beatles
+      /artist Drake
 
-      This will show you detailed information about the artist from Genius.com
+      This will fetch detailed artist information from Genius.
 
-    searching: "🔍 Searching for <b>{artist}</b> on Genius..."
+    searching: "🔍 Searching for artist: <b>{artist}</b>..."
 
-    not_found: |
-      ❌ Artist <b>{artist}</b> not found on Genius.
-
-      Try a different spelling or check the artist name.
+    not_found: "❌ Artist not found: <b>{artist}</b>\n\nTry a different spelling or check the artist name."
 
     api_unavailable: |
-      ⚠️ <b>Genius API is currently unavailable</b>
+      ⚠️ <b>Genius API is not available</b>
 
-      Artist search feature is temporarily disabled.
-      Please try again later or contact the administrator.
+      This feature requires a Genius API token.
+      Contact the administrator to enable it.
 
     error: |
-      ❌ An error occurred while fetching artist info.
+      ❌ <b>Error fetching artist info</b>
 
-      Please try again later.
-
-# Настройки поиска
-search:
-  max_results: 5           # Максимальное количество результатов поиска
-  fuzzy_search: true       # Нечёткий поиск (разрешает опечатки)
-  case_sensitive: false    # Регистрозависимый поиск
-
-# Настройки базы данных
-database:
-  url: "postgresql+asyncpg://musicbot:musicpass@db:5432/musicdb"
-  pool_size: 5             # Размер пула соединений
-  max_overflow: 10         # Дополнительные соединения при нагрузке
-  echo: false              # Логировать SQL запросы (true для отладки)
-
-# Ограничения файлов
-file_limits:
-  max_file_size_mb: 20
-  supported_formats:
-    - mp3
-    - wav
-    - flac
-    - m4a
-    - ogg
-
-# Включение/выключение функций
-features:
-  send_audio: true         # Отправка аудио пользователям
-  inline_search: true      # Inline-кнопки для поиска
-  upload_enabled: true     # Загрузка треков админами
-  artist_search: true      # Поиск артистов через Genius API
-  album_navigation: true   # Навигация по альбомам
-  pagination: true         # Пагинация результатов
-
-# Настройки для Genius API
-genius:
-  enabled: true
-  max_songs: 5                     # Количество популярных песен
-  max_description_length: 600      # Максимальная длина описания артиста
-  include_alternate_names: true    # Показывать альтернативные имена
-  include_social_links: true       # Показывать ссылки на соцсети
-  include_stats: true              # Показывать статистику (followers, IQ)
-  text_format: "plain"             # Формат текста (plain, html, dom)
-
-# Настройки пагинации
-pagination:
-  albums_per_page: 5       # Количество альбомов на странице
-  tracks_per_page: 8       # Количество треков на странице
-
-# Настройки логирования
-logging:
-  level: "INFO"            # DEBUG, INFO, WARNING, ERROR, CRITICAL
-  log_to_console: true     # Выводить логи в консоль (Docker logs)
-  log_to_file: true        # Сохранять логи в файл
-  file_path: "logs/bot.log"
-  max_file_size_mb: 10     # Максимальный размер файла лога
-  backup_count: 5          # Количество старых файлов логов
-  format: "detailed"       # "simple" или "detailed"
+      Please try again later or contact support.
