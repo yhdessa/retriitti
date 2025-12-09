@@ -4,17 +4,22 @@ from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
 
+
 class Track(Base):
     __tablename__ = 'tracks'
 
     track_id = Column(Integer, primary_key=True, autoincrement=True)
+
     title = Column(Text, nullable=False, index=True)
     artist = Column(Text, nullable=False, index=True)
+
+    telegram_file_id = Column('file_id', Text, nullable=False, unique=True)
+
     album = Column(Text, nullable=True, index=True)
     genre = Column(Text, nullable=True)
-    telegram_file_id = Column('file_id', Text, nullable=False, unique=True)  # ← Changed here
     duration = Column(Integer, nullable=True)
     tags = Column(Text, nullable=True)
+
     uploaded_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     def __repr__(self):
