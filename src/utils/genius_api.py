@@ -43,7 +43,6 @@ class GeniusClient:
                 timeout=10
             )
             response.raise_for_status()
-
             data = response.json()
             hits = data.get("response", {}).get("hits", [])
 
@@ -142,12 +141,9 @@ class GeniusClient:
                 return None
 
             logger.info(f"Found artist: {artist_name_found} (ID: {artist_id})")
-
             artist_full = self.get_artist(artist_id)
-
             if not artist_full:
                 artist_full = primary_artist
-
             songs = self.get_artist_songs(
                 artist_id,
                 sort="popularity",
@@ -203,11 +199,9 @@ class GeniusClient:
 
 _genius_client: Optional[GeniusClient] = None
 
-
 def get_genius_client() -> GeniusClient:
     global _genius_client
 
     if _genius_client is None:
         _genius_client = GeniusClient()
-
     return _genius_client
