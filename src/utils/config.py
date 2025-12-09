@@ -1,51 +1,55 @@
-from typing import Any, Dict, Optional
-from pathlib import Path
+import os
 import yaml
+from pathlib import Path
+from typing import Any, Optional
+from string import Template
 
 
 class Config:
+    def __init__(self, config_data: dict):
+        self._data = config_data
+        self._cache = {}
 
-    def __init__(self, config_path: Path):
-        self.config_path = config_path
-        self._data: Dict[str, Any] = {}
-        self.load()
+    def get(self, key: str, default: Any = None) -> Any:
+        if key in self._cache:
+            return self._cache[key]
 
-    def load(self) -> None:
-        try:
-            with open(self.config_path, "r", encoding="utf-8") as f:
-                self._data = yaml.safe_load(f)
-        except FileNotFoundError:
-            raise FileNotFoundError(f"Config file not found: {self.config_path}")
-        except yaml.YAMLError as e:
-            raise ValueError(f"Error parsing YAML config: {e}")
-
-    def get(self, path: str, default: Any = None) -> Any:
-        keys = path.split('.')
+        keys = key.split('.')
         value = self._data
 
-        for key in keys:
+        for k in keys:
             if isinstance(value, dict):
-                value = value.get(key)
+                value = value.get(k)
                 if value is None:
                     return default
             else:
                 return default
 
+        self._cache[key] = value
         return value
 
     def get_message(self, key: str, **kwargs) -> str:
-        message = self.get(f'messages.{key}', '')
+        message = self.get(f'messages.{key}')
 
-        if not message:
+        if message is None:
+            message = self.get(key)
+
+        if message is None:
             return f"[Message '{key}' not found]"
+
+        if not isinstance(message, str):
+            return str(message)
 
         try:
             return message.format(**kwargs)
         except KeyError as e:
             return message
+        except Exception as e:
+            return message
 
     @property
     def bot_name(self) -> str:
+        """Get bot name"""
         return self.get('bot.name', 'Music Bot')
 
     @property
@@ -54,36 +58,75 @@ class Config:
 
     @property
     def genius_enabled(self) -> bool:
-        return self.get('genius.enabled', True) and self.get('features.artist_search', True)
-
-    @property
-    def genius_max_songs(self) -> int:
-        return self.get('genius.max_songs', 5)
+        enabled = self.get('genius.enabled', False)
+        api_token = os.getenv('GENIUS_API_TOKEN')
+        return enabled and bool(api_token)
 
     @property
     def genius_max_description_length(self) -> int:
-        return self.get('genius.max_description_length', 600)
+        return self.get('genius.max_description_length', 500)
 
-    @property
-    def albums_per_page(self) -> int:
-        return self.get('pagination.albums_per_page', 5)
+    def __getitem__(self, key: str) -> Any:
+        return self.get(key)
 
-    @property
-    def tracks_per_page(self) -> int:
-        return self.get('pagination.tracks_per_page', 8)
+    def __contains__(self, key: str) -> bool:
+        return self.get(key) is not None
 
 
-_config: Optional[Config] = None
+def load_env_vars(text: str) -> str:
+    import re
+
+    pattern = r'\$\{([^}:]+)(?::([^}]*))?\}'
+
+    def replacer(match):
+        var_name = match.group(1)
+        default_value = match.group(2)
+
+        env_value = os.getenv(var_name)
+
+        if env_value is not None:
+            return env_value
+        elif default_value is not None:
+            return default_value
+        else:
+            return match.group(0)
+    return re.sub(pattern, replacer, text)
 
 
-def get_config() -> Config:
-    global _config
-    if _config is None:
-        raise RuntimeError("Config not initialized. Call setup_config() first.")
-    return _config
+def process_config_values(data: Any) -> Any:
+    if isinstance(data, dict):
+        return {k: process_config_values(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [process_config_values(item) for item in data]
+    elif isinstance(data, str):
+        return load_env_vars(data)
+    else:
+        return data
 
 
 def setup_config(config_path: Path) -> Config:
-    global _config
-    _config = Config(config_path)
-    return _config
+    if not config_path.exists():
+        raise FileNotFoundError(f"Config file not found: {config_path}")
+
+    with open(config_path, 'r', encoding='utf-8') as f:
+        raw_data = yaml.safe_load(f)
+
+    processed_data = process_config_values(raw_data)
+
+    config = Config(processed_data)
+
+    global _global_config
+    _global_config = config
+
+    return config
+
+
+_global_config: Optional[Config] = None
+
+
+def get_config() -> Config:
+    if _global_config is None:
+        raise RuntimeError(
+            "Config not initialized. Call setup_config() first."
+        )
+    return _global_config

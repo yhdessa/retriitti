@@ -1,5 +1,3 @@
-# src/utils/genius_api.py
-
 import os
 import requests
 from typing import Optional, Dict, Any, List
@@ -91,17 +89,6 @@ class GeniusClient:
         sort: str = "popularity",
         per_page: int = 5
     ) -> Optional[List[Dict[str, Any]]]:
-        """
-        Получить песни артиста
-
-        Args:
-            artist_id: ID артиста
-            sort: Сортировка ('title' или 'popularity')
-            per_page: Количество песен
-
-        Returns:
-            Список песен или None
-        """
         try:
             url = f"{self.BASE_URL}/artists/{artist_id}/songs"
             params = {
