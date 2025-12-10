@@ -2,8 +2,7 @@
 bot:
   name: "Music Bot"
   version: "1.0.0"
-  admins:
-    -
+
 
 logging:
   level: "INFO"

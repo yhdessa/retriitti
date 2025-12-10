@@ -1,8 +1,11 @@
 from aiogram import Router, types, F
 from aiogram.filters import Command
+from aiogram import html
+import os
 from utils.config import get_config
 from utils.logger import get_logger
 from utils.musicbrainz_api import fetch_album_with_fallback, enrich_track_metadata
+from utils.error_handler import sanitize_error_message, get_safe_error_text
 from db import get_session
 from db.models import Track
 from db.crud import (
@@ -18,8 +21,33 @@ logger = get_logger(__name__)
 router = Router()
 
 
+def is_admin(user_id: int) -> bool:
+    config = get_config()
+
+    env_admins = os.getenv('ADMIN_IDS', '')
+    if env_admins:
+        try:
+            admin_ids = [int(id.strip()) for id in env_admins.split(',') if id.strip()]
+            if user_id in admin_ids:
+                return True
+        except ValueError:
+            logger.error(f"Invalid ADMIN_IDS in .env: {env_admins}")
+
+    config_admins = config.get('bot.admins', [])
+    return user_id in config_admins
+
+
 @router.message(Command("upload"))
 async def upload_command(message: types.Message):
+    if not is_admin(message.from_user.id):
+        await message.answer(
+            "⛔️ <b>Access Denied</b>\n\n"
+            "Only administrators can upload tracks.\n"
+            "Contact the bot owner if you need access."
+        )
+        logger.warning(f"Unauthorized upload attempt by user {message.from_user.id}")
+        return
+
     config = get_config()
     text = config.get_message('upload.instruction')
     await message.answer(text)
@@ -27,6 +55,18 @@ async def upload_command(message: types.Message):
 
 @router.message(F.audio)
 async def handle_audio_upload(message: types.Message):
+    if not is_admin(message.from_user.id):
+        await message.answer(
+            "⛔️ <b>Access Denied</b>\n\n"
+            "Only administrators can upload tracks.\n\n"
+            "You can still:\n"
+            "• Search for tracks\n"
+            "• Browse artists\n"
+            "• Download tracks"
+        )
+        logger.warning(f"Unauthorized audio upload attempt by user {message.from_user.id}")
+        return
+
     config = get_config()
     audio = message.audio
 
@@ -53,7 +93,6 @@ async def handle_audio_upload(message: types.Message):
                     f"\n📊 Track ID: {existing.track_id}"
                 )
                 return
-
         should_fetch = (
             artist != "Unknown Artist"
             and title != "Unknown"
@@ -150,9 +189,9 @@ async def handle_audio_upload(message: types.Message):
                         if existing_track:
                             await message.answer(
                                 "⚠️ <b>Track already exists in database</b>\n\n"
-                                f"🎵 <b>Title:</b> {existing_track.title}\n"
-                                f"👤 <b>Artist:</b> {existing_track.artist}\n"
-                                + (f"💿 <b>Album:</b> {existing_track.album}\n" if existing_track.album else "") +
+                                f"🎵 <b>Title:</b> {html.quote(existing_track.title)}\n"
+                                f"👤 <b>Artist:</b> {html.quote(existing_track.artist)}\n"
+                                + (f"💿 <b>Album:</b> {html.quote(existing_track.album)}\n" if existing_track.album else "") +
                                 f"\n📊 <b>Track ID:</b> {existing_track.track_id}"
                             )
                         else:
@@ -166,28 +205,25 @@ async def handle_audio_upload(message: types.Message):
                             "This file already exists in the database."
                         )
                 else:
+                    error_safe = sanitize_error_message(e, max_length=150)
                     await message.answer(
                         "❌ <b>Database error</b>\n\n"
                         f"Could not save track due to a constraint violation.\n\n"
-                        f"<code>{error_detail[:150]}</code>"
+                        f"<code>{error_safe}</code>"
                     )
 
             except Exception as e:
                 await session.rollback()
                 logger.error(f"Unexpected error while saving track: {e}", exc_info=True)
-                await message.answer(
-                    "❌ <b>Error saving track</b>\n\n"
-                    f"An unexpected error occurred:\n"
-                    f"<code>{str(e)[:150]}</code>\n\n"
-                    "Please try again or contact support."
-                )
+
+                error_text = get_safe_error_text(e, context="saving track")
+                await message.answer(error_text)
 
     except Exception as e:
         logger.error(f"Error processing audio upload: {e}", exc_info=True)
-        await message.answer(
-            "❌ <b>Error processing track</b>\n\n"
-            "Please try again or contact support."
-        )
+
+        error_text = get_safe_error_text(e, context="processing track")
+        await message.answer(error_text)
 
 
 @router.message(F.document)
@@ -228,10 +264,8 @@ async def bulk_upload_command(message: types.Message):
 async def enrich_all_command(message: types.Message):
 
     user_id = message.from_user.id
-    config = get_config()
-    admin_ids = config.get('admin_ids', [])
 
-    if user_id not in admin_ids:
+    if not is_admin(user_id):
         await message.answer(
             "⛔️ <b>Access Denied</b>\n\n"
             "This command is only available to administrators."
@@ -313,7 +347,6 @@ async def enrich_all_command(message: types.Message):
                     logger.error(f"Error enriching track {track.track_id}: {e}", exc_info=True)
                     failed += 1
 
-            # Final report
             success_rate = (updated / total * 100) if total > 0 else 0
 
             await status_msg.edit_text(
